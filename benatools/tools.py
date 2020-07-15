@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+import gc
 
 
 class MultiStratifiedKFold():
@@ -26,3 +28,29 @@ class MultiStratifiedKFold():
 
     def as_list(self):
         return [self.get_indices(i) for i in range(self.folds)]
+
+'''
+Read Dataframe from file, based on file extension
+file is a path with an extension
+'''
+def toDF(file):
+    extension = file.split('.')[1]
+    if extension == 'csv':
+        return pd.read_csv(file)
+    if extension == 'feather':
+        return pd.read_feather(file)
+    if extension == 'parquet':
+        return pd.read_parquet(file)
+
+'''
+files is a list of paths
+'''
+def toDF_all(files):
+    dfs = []
+    for f in files:
+        df = toDF(f)
+        dfs.append(df)
+    df_final = pd.concat(dfs)
+    del dfs
+    gc.collect()
+    return df_final
