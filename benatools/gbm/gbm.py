@@ -65,6 +65,9 @@ class GBMFitter():
             - folds: Number of folds for CV
             - feature_selection: the threshold to select features. If -1, takes all"""
 
+        if not self.training_data[library]:
+            return
+
         print("Training " + library + " models")
         start = time.time()
         for model in self.training_data[library]:
@@ -84,10 +87,8 @@ class GBMFitter():
 
                 # Perform CV
                 y_pred = np.zeros(X_data.shape[0])
-                for f in range(self.cv.folds):
+                for f, train_index, val_index in enumerate(self.cv.split(X_data, y)):
                     print("\t\tTraining fold {} ".format(f))
-                    train_index, val_index = self.cv.get_indices(f)  # get indices of this fold
-
                     y_pred[val_index] = self._train(library,
                                                     model,
                                                     train=(X_data.iloc[train_index], y.iloc[train_index]),
@@ -96,7 +97,7 @@ class GBMFitter():
                 # Print CV metric
                 for metric in self.metrics:
                     print(
-                        "\t\tMetric: {:.4f}, elapsed {}".format(metric(y, y_pred), str(round(time.time() - start, 2))))
+                        "\t\tOOF Validation Metric: {:.4f}, total time elapsed {}".format(metric(y, y_pred), str(round(time.time() - start, 2))))
             # If folds is 1, then train on all the dataset with no CV
             else:
                 self._train(library, model, X_data, y, categorical)
@@ -126,7 +127,8 @@ class GBMFitter():
             
         # Train and predict train and validation sets
         if library == 'CB':
-            m = cb.train(dtrain=cb.Pool(data=X_train, label=y_train,
+            m = cb.train(dtrain=cb.Pool(data=X_train,
+                                        label=y_train,
                                         cat_features=self._get_categorical_index(X_train, categorical)),
                          params=model_data['params'],
                          logging_level='Silent',
@@ -155,9 +157,11 @@ class GBMFitter():
             if 'obj' in model_data:
                 obj = model_data['obj']
             m = lgb.train(params=model_data['params'],
-                          train_set=lgb.Dataset(X_train, label=y_train,
-                                                categorical_feature=self._get_categorical_index(X_train, categorical),
+                          train_set=lgb.Dataset(X_train,
+                                                label=y_train,
                                                 free_raw_data=False),
+                          categorical_feature=self._get_categorical_index(X_train,
+                                                                          categorical) if categorical else 'auto',
                           num_boost_round=model_data['n'],
                           fobj=obj)
             y_pred_train = m.predict(X_train)
@@ -181,7 +185,7 @@ class GBMFitter():
         # f1 = f1_score(y_val, y_pred_val, average='macro')
 
         # print("\t\t\tTrain Accuracy: {:.4f}, Train F1: {:.4f}, Val Accuracy: {:.4f}, Val F1: {:.4f},  elapsed {}".format( acc_train, f1_train, acc, f1, str(time.time() - start)) )
-        print("\t\t\tTrain Metric: {:.4f}, Val Metric: {:.4f}, elapsed {}".format(train_metric, val_metric,
+        print("\t\t\tTrain Metric: {:.4f}, OOF Val Metric: {:.4f}, elapsed {}".format(train_metric, val_metric,
                                                                                   str(round(time.time() - start, 2))))
 
         # Store model and rounder if needed
