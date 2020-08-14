@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="benatools",
-    version="0.0.2",
+    version="0.0.4",
     author="Alberto Benayas",
     author_email="benayas1@gmail.com",
     description="Utilities package for XGBoost, CatBoost, LightGBM, Tensorflow and Pytorch",
@@ -30,7 +30,9 @@ setuptools.setup(
           'timm',
           'xgboost',
           'catboost',
-          'lightgbm'
+          'lightgbm',
+          'hyperopt',
+          'statsmodels'
       ],
     python_requires='>=3.6',
 )

@@ -81,10 +81,7 @@ class GBMFitter():
 
             # Training for CV
             if self.cv is not None:
-                print("\tTraining with " + str(self.cv.folds) + " folds")
-                # kf = KFold(n_splits=folds, random_state=7)
-                # Replaced with new CV Stategy
-
+                print("\tTraining with " + str(self.cv.get_n_splits()) + " folds")
                 # Perform CV
                 y_pred = np.zeros(X_data.shape[0])
                 for f, (train_index, val_index) in enumerate(self.cv.split(X_data, y)):
@@ -96,8 +93,7 @@ class GBMFitter():
                                                     categorical=categorical)
                 # Print CV metric
                 for metric in self.metrics:
-                    print(
-                        "\t\tOOF Validation Metric: {:.4f}, total time elapsed {}".format(metric(y, y_pred), str(round(time.time() - start, 2))))
+                    print("\t\tOOF Validation Metric: {:.4f}, total time elapsed {}".format(metric(y, y_pred), str(round(time.time() - start, 2))))
             # If folds is 1, then train on all the dataset with no CV
             else:
                 self._train(library, model, X_data, y, categorical)
