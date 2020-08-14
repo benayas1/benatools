@@ -62,6 +62,9 @@ class MultiStratifiedKFold():
         """ Returns a list of indices"""
         return [self.get_indices(i) for i in range(self.folds)]
 
+    def get_n_splits(self):
+        return self.folds
+
 '''
 Read Dataframe from file, based on file extension
 file is a path with an extension
