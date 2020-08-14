@@ -87,7 +87,7 @@ class GBMFitter():
 
                 # Perform CV
                 y_pred = np.zeros(X_data.shape[0])
-                for f, train_index, val_index in enumerate(self.cv.split(X_data, y)):
+                for f, (train_index, val_index) in enumerate(self.cv.split(X_data, y)):
                     print("\t\tTraining fold {} ".format(f))
                     y_pred[val_index] = self._train(library,
                                                     model,
