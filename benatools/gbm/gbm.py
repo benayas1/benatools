@@ -6,6 +6,7 @@ import pandas as pd
 import scipy as sp
 import time
 import gc
+import sklearn.metrics as mt
 
 
 # Class to hold and train many models (CB, XGB and LGB) on the same dataset
@@ -93,7 +94,11 @@ class GBMFitter():
                                                     categorical=categorical)
                 # Print CV metric
                 for metric in self.metrics:
-                    print("\t\tOOF Validation Metric: {:.4f}, total time elapsed {}".format(metric(y, y_pred), str(round(time.time() - start, 2))))
+                    if metric == 'rmse':
+                        value = mt.mean_squared_error(y, y_pred, squared=False)
+                    else:
+                        value = metric(y, y_pred)
+                    print("\t\tOOF Validation Metric: {:.4f}, total time elapsed {}".format(value, str(round(time.time() - start, 2))))
             # If folds is 1, then train on all the dataset with no CV
             else:
                 self._train(library, model, X_data, y, categorical)
@@ -171,8 +176,12 @@ class GBMFitter():
 
         # Evaluate Train
         for metric in self.metrics:
-            train_metric = metric(y_train, y_pred_train)
-            val_metric = metric(y_val, y_pred_val)
+            if metric == 'rmse':
+                train_metric = mt.mean_squared_error(y_train, y_pred_train, squared=False)
+                val_metric = mt.mean_squared_error(y_val, y_pred_val, squared=False)
+            else:
+                train_metric = metric(y_train, y_pred_train)
+                val_metric = metric(y_val, y_pred_val)
         # acc_train = accuracy_score(y_train, y_pred_train)
         # f1_train = f1_score(y_train, y_pred_train, average='macro')
 

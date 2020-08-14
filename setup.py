@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="benatools",
-    version="0.0.11",
+    version="0.0.12",
     author="Alberto Benayas",
     author_email="benayas1@gmail.com",
     description="Utilities package for XGBoost, CatBoost, LightGBM, Tensorflow and Pytorch",

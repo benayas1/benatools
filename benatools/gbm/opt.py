@@ -261,25 +261,25 @@ def opt_lightgbm(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, v
         dict that contains the best params and the best number of iterations
     """
     HYPEROPT_PARAMS = {'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(0.3)),
-                        'num_leaves': hp.choice('num_leaves', [2 ** i - 1 for i in range(3, 11)]),
+                        'num_leaves': hp.qloguniform('num_leaves', np.log(32), np.log(256), 5),
                         'max_depth': hp.quniform('max_depth', 2, 10, 2),  # 10,
-                        'min_data_in_leaf': hp.choice('min_data_in_leaf', [2 ** i - 1 for i in range(3, 11)]),
+                        'min_data_in_leaf': hp.qloguniform('min_data_in_leaf', np.log(32), np.log(256), 5),
                         # 'min_child_weight': hp.loguniform('min_child_weight', -16, 5)
                         'bagging_fraction': hp.uniform('bagging_fraction', 0.2, 0.9),
                         'bagging_freq': hp.uniform('bagging_freq', 1, 10),
                         'feature_fraction': hp.uniform('feature_fraction', 0.2, 0.9),
                         'lambda_l1': hp.loguniform('lambda_l1', 0, np.log(100)),
                         'lambda_l2': hp.loguniform('lambda_l2', 0, np.log(20)),
-                        'max_bin': hp.choice('max_bin', [2 ** i - 1 for i in range(3, 11)]),
+                        #'max_bin': hp.qloguniform('max_bin', np.log(32), np.log(64), 5), #border count,
                         'metric': 'rmse',
                         'seed': hp.choice('seed', [0, 1, 2, 3]),
                         'num_threads': 5,
                         # 'gpu_id': 0,
-                        'device_type ':device.lower()
+                        'device_type':device.lower()
                         }
 
     HYPEROPT_PARAMS = _update_params(HYPEROPT_PARAMS, params)
-    INTEGER_PARAMS_LIST = ['max_depth', 'seed', 'max_bin', 'bagging_freq']
+    INTEGER_PARAMS_LIST = ['max_depth', 'seed', 'bagging_freq','num_leaves','min_data_in_leaf']
 
     dataset = lgb.Dataset(X_train, label=y_train, categorical_feature =cat_features)
 
@@ -324,6 +324,10 @@ def opt_lightgbm(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, v
                        trials=trials)
 
     best_params, best_n = _get_best_params(hyperopt_lgb, HYPEROPT_PARAMS, INTEGER_PARAMS_LIST, trials)
+    # apparently hyperopt has a bug on choice methods
+    #best_params['num_leaves'] = 2 ** (best_params['num_leaves']+3) - 1
+    #best_params['min_data_in_leaf'] = 2 ** (best_params['min_data_in_leaf']+3) - 1
+    #best_params['max_bin'] = 2 ** (best_params['max_bin']+3) - 1
 
     # Plot results
     if verbose == 2:
