@@ -3,6 +3,7 @@ import lightgbm as lgb
 import catboost as cb
 import numpy as np
 import pandas as pd
+import scipy as sp
 import time
 import gc
 
@@ -10,7 +11,7 @@ import gc
 # Class to hold and train many models (CB, XGB and LGB) on the same dataset
 class GBMFitter():
     def __init__(self, cb_data=[], xgb_data=[], lgb_data=[], cv_strategy=None, use_rounders=False, metrics=['rmse']):
-        '''Generates models in a CV manner for all 3 libraries algorithms
+        """Generates models in a CV manner for all 3 libraries algorithms
 
         Inputs:
             - cb_data: a list of CatBoost params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
@@ -18,8 +19,8 @@ class GBMFitter():
             - lgb_data: a list of Light GBM params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
             - folds: Number of folds for CV
             - feature_selection: the threshold to select features. If -1, takes all
-            - cv_strategy: 
-            - use_rounders: boolean to indicate to use rounders '''
+            - cv_strategy:
+            - use_rounders: boolean to indicate to use rounders """
         self.training_data = {'CB': cb_data, 'XGB': xgb_data, 'LGB': lgb_data}
         self.models = {'CB': [], 'XGB': [], 'LGB': []}
         self.rounders = {'CB': [], 'XGB': [], 'LGB': []}
@@ -33,14 +34,14 @@ class GBMFitter():
         return cat_features_index
 
     def fit(self, X, y, categorical=[], feature_selection=-1, skip_CB=False, skip_XGB=False, skip_LGB=False):
-        '''Generates models in a CV manner for all 3 libraries algorithms
+        """Generates models in a CV manner for all 3 libraries algorithms
 
         Inputs:
             - X: Dataframe with features
             - y: target variable
             - categorical: a list of categorical variables
             - folds: Number of folds for CV
-            - feature_selection: the threshold to select features. If -1, takes all'''
+            - feature_selection: the threshold to select features. If -1, takes all"""
 
         # Fits the data for each library algorithm
         if skip_CB == False:
@@ -53,7 +54,7 @@ class GBMFitter():
             self._fit('LGB', X, y, categorical, feature_selection)
 
     def _fit(self, library, X, y, categorical=[], feature_selection=-1):
-        ''' Fits data into the algorithms. Generates a model per fold, and stores a
+        """ Fits data into the algorithms. Generates a model per fold, and stores a
         tuple of (model, rounder) into self.models for each fold.
 
         Inputs:
@@ -62,7 +63,7 @@ class GBMFitter():
             - y: target variable
             - categorical: a list of categorical variables
             - folds: Number of folds for CV
-            - feature_selection: the threshold to select features. If -1, takes all'''
+            - feature_selection: the threshold to select features. If -1, takes all"""
 
         print("Training " + library + " models")
         start = time.time()
@@ -101,7 +102,7 @@ class GBMFitter():
                 self._train(library, model, X_data, y, categorical)
 
     def _train(self, library, model_data, train, validation=None, categorical=[]):
-        ''' Trains a mode on training data, calculates predictions for training and for validation,
+        """ Trains a mode on training data, calculates predictions for training and for validation,
         and also creates and fits the corresponding OptRounder object.
 
         Inputs:
@@ -110,7 +111,7 @@ class GBMFitter():
             - train: Tuple with train data, train[0] is X and train[1] is y
             - validation: Validation data, validation[0] is X and validation[1] is y
             - categorical: List with the categorical variables
-            '''
+            """
 
         # Get train and validation sets
         start = time.time()
@@ -191,14 +192,14 @@ class GBMFitter():
         return y_pred_val
 
     def predict(self, X, mean_function=None):
-        '''Predicts the regression value without calculating a class
+        """Predicts the regression value without calculating a class
 
         Inputs:
             - X: Data to predict a class for
             - mean_function: Function to run as part of .apply, to average the class result from all columns. It is included in a new column
 
         Output:
-            - Returns a Pandas DataFrame with all the predicted class for each sample (row) and each model (column)'''
+            - Returns a Pandas DataFrame with all the predicted class for each sample (row) and each model (column)"""
         df = pd.DataFrame()
 
         for i in range(0, len(self.models['CB'])):
@@ -219,14 +220,14 @@ class GBMFitter():
         return df
 
     def predict_class(self, X, mean_function=None):
-        '''Predicts a class for the given data X. The class is determined by the optimizer, which has been previously fitted.
+        """Predicts a class for the given data X. The class is determined by the optimizer, which has been previously fitted.
 
         Inputs:
             - X: Data to predict a class for
             - mean_function: Function to run as part of .apply, to average the class result from all columns. It is included in a new column
 
         Output:
-            - Returns a Pandas DataFrame with all the predicted class for each sample (row) and each model (column)'''
+            - Returns a Pandas DataFrame with all the predicted class for each sample (row) and each model (column)"""
         df = pd.DataFrame()
 
         # Predict values for every calculated model for Catboost
