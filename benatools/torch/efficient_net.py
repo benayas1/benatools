@@ -20,9 +20,9 @@ def create_efn(b, weights='imagenet', include_top=False, n_classes=1000):
 
         version = 'efficientnet-b'+str(b)
         if weights is None:
-                model = EfficientNet.from_name(version, n_classes=n_classes)
+                model = EfficientNet.from_name(version, num_classes=n_classes)
         else:
-                model = EfficientNet.from_pretrained(version, n_classes=n_classes)
+                model = EfficientNet.from_pretrained(version, num_classes=n_classes)
 
         if include_top == 'False':  # If not including top, it invalidates the n_classes parameter
                 model._fc = Identity()
