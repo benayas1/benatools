@@ -9,11 +9,12 @@ class MultiStratifiedKFold():
         Indices split happens at creation time
     
     """
-    def __init__(self, n_splits, df, features):
+    def __init__(self, n_splits, df, features, seed=0):
         self.folds = n_splits
         self.features = features
 
         index = []
+        np.random.seed(seed)
         for key, idx in df.groupby(self.features).groups.items():
             arr = idx.values.copy()
             np.random.shuffle(arr)

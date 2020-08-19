@@ -1,3 +1,6 @@
+
+# from https://github.com/qubvel/efficientnet/tree/master/efficientnet
+
 import efficientnet.tfkeras as efn
 
 EFNS = [efn.EfficientNetB0, efn.EfficientNetB1, efn.EfficientNetB2, efn.EfficientNetB3,
