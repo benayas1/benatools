@@ -10,7 +10,7 @@ import sklearn.metrics as mt
 
 
 # Class to hold and train many models (CB, XGB and LGB) on the same dataset
-class GBMFitter():
+class GBMFitter:
     def __init__(self, cb_data=[], xgb_data=[], lgb_data=[], cv_strategy=None, cv_groups=None, use_rounders=False, metrics=['rmse']):
         """Generates models in a CV manner for all 3 libraries algorithms
 
@@ -23,8 +23,9 @@ class GBMFitter():
             - cv_strategy:
             - use_rounders: boolean to indicate to use rounders """
         self.training_data = {'CB': cb_data, 'XGB': xgb_data, 'LGB': lgb_data}
-        self.models = {'CB': [], 'XGB': [], 'LGB': []}
+        self.models = {'CB': [], 'XGB': [], 'LGB': []}  # for each category, generates folds models
         self.rounders = {'CB': [], 'XGB': [], 'LGB': []}
+        self.oof = {'CB': []}
         self.fselection = {}
         self.cv = cv_strategy
         self.cv_groups = cv_groups
@@ -100,9 +101,13 @@ class GBMFitter():
                     else:
                         value = metric(y, y_pred)
                     print("\t\tOOF Validation Metric: {:.4f}, total time elapsed {}".format(value, str(round(time.time() - start, 2))))
+
+                # save OOF results
+                self.oof[library].append(y_pred)
+
             # If folds is 1, then train on all the dataset with no CV
             else:
-                self._train(library, model, X_data, y, categorical)
+                self._train(library, model, X_data, y, categorical)  # TODO to be tested
 
     def _train(self, library, model_data, train, validation=None, categorical=[]):
         """ Trains a mode on training data, calculates predictions for training and for validation,
@@ -149,7 +154,7 @@ class GBMFitter():
             y_pred_train = m.predict(xgb.DMatrix(X_train))
             y_pred_val = m.predict(xgb.DMatrix(X_val))
             f = m.save_model('xgb_temp')
-            m.__del__()
+            m.__del__()  # release memory as XGB does not do it automatically
             gc.collect()
             m = xgb.Booster()
             m.load_model('xgb_temp')
@@ -200,6 +205,16 @@ class GBMFitter():
             self.rounders[library].append(rounder)
 
         return y_pred_val
+
+    def get_oof(self, library):
+        """Returns OOF for
+
+            Inputs:
+                - library: Whether 'CB', 'XGB' or 'LGB'
+
+            Output:
+                - Returns a list of Numpy arrays. One array per configuration"""
+        return self.oof[library]
 
     def predict(self, X, mean_function=None):
         """Predicts the regression value without calculating a class
