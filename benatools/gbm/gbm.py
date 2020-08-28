@@ -11,7 +11,7 @@ import sklearn.metrics as mt
 
 # Class to hold and train many models (CB, XGB and LGB) on the same dataset
 class GBMFitter():
-    def __init__(self, cb_data=[], xgb_data=[], lgb_data=[], cv_strategy=None, use_rounders=False, metrics=['rmse']):
+    def __init__(self, cb_data=[], xgb_data=[], lgb_data=[], cv_strategy=None, cv_groups=None, use_rounders=False, metrics=['rmse']):
         """Generates models in a CV manner for all 3 libraries algorithms
 
         Inputs:
@@ -27,6 +27,7 @@ class GBMFitter():
         self.rounders = {'CB': [], 'XGB': [], 'LGB': []}
         self.fselection = {}
         self.cv = cv_strategy
+        self.cv_groups = cv_groups
         self.use_rounders = use_rounders
         self.metrics = metrics
 
@@ -85,7 +86,7 @@ class GBMFitter():
                 print("\tTraining with " + str(self.cv.get_n_splits()) + " folds")
                 # Perform CV
                 y_pred = np.zeros(X_data.shape[0])
-                for f, (train_index, val_index) in enumerate(self.cv.split(X_data, y)):
+                for f, (train_index, val_index) in enumerate(self.cv.split(X_data, y, self.cv_groups)):
                     print("\t\tTraining fold {} ".format(f))
                     y_pred[val_index] = self._train(library,
                                                     model,

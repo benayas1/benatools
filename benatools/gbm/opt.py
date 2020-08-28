@@ -54,13 +54,26 @@ def _update_params(hyperopt_params, params):
     return hyperopt_params
 
 
-def opt_catboost(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, verbose=0, params=None, device='GPU', max_rounds=5000, seed=0, early_stopping=20, figsize=(15,6)):
+def opt_catboost(X_train,
+                 y_train,
+                 cat_features=None,
+                 cv_folds=3,
+                 folds=None,
+                 n_trials=20,
+                 verbose=0,
+                 params=None,
+                 device='GPU',
+                 max_rounds=5000,
+                 seed=0,
+                 early_stopping=20,
+                 figsize=(15,6)):
     """
     Performs n_trials using Hyperopt to obtain the best catboost parameters
 
     Inputs:
         X_train, y_train, cat_features: Data to build Pool object
         cv_folds: number of CV folds for validation on each trial
+        folds: Custom splitting indices. This parameter has the highest priority among other data split parameters.
         n_trials: number of trials to perform
         verbose: 0 = no log and no plot, 1 = log but no plot, 2 = log and plot
         params: dict to override the Hyperopt params
@@ -112,6 +125,7 @@ def opt_catboost(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, v
                    verbose=False,
                    seed=seed,
                    early_stopping_rounds=early_stopping,
+                   folds=folds,
                    as_pandas=True)
 
         # Metric to extract the loss from
@@ -148,7 +162,19 @@ def opt_catboost(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, v
     return {'params':best_params, 'n':best_n}
 
 
-def opt_xgboost(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, verbose=0, params=None, device='GPU', max_rounds=5000, seed=0, early_stopping=20, figsize=(15,6)):
+def opt_xgboost(X_train,
+                y_train,
+                cat_features=None,
+                cv_folds=3,
+                folds=None,
+                n_trials=20,
+                verbose=0,
+                params=None,
+                device='GPU',
+                max_rounds=5000,
+                seed=0,
+                early_stopping=20,
+                figsize=(15,6)):
     """
     Performs n_trials using Hyperopt to obtain the best XGBoost parameters
 
@@ -200,6 +226,7 @@ def opt_xgboost(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, ve
         cv = xgb.cv(params=params,
                     dtrain=train_dmatrix,
                     nfold=cv_folds,
+                    folds=folds,
                     stratified=False,
                     metrics=params['eval_metric'],
                     verbose_eval=False,
@@ -242,7 +269,19 @@ def opt_xgboost(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, ve
     return {'params': best_params, 'n': best_n}
 
 
-def opt_lightgbm(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, verbose=0, params=None, device='CPU', max_rounds=5000, seed=0, early_stopping=20, figsize=(15,6)):
+def opt_lightgbm(X_train,
+                 y_train,
+                 cat_features=None,
+                 cv_folds=3,
+                 folds=None,
+                 n_trials=20,
+                 verbose=0,
+                 params=None,
+                 device='CPU',
+                 max_rounds=5000,
+                 seed=0,
+                 early_stopping=20,
+                 figsize=(15,6)):
     """
     Performs n_trials using Hyperopt to obtain the best LightGBM parameters
 
@@ -293,6 +332,7 @@ def opt_lightgbm(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, v
         cv = lgb.cv(params=params,
                     train_set=dataset,
                     nfold=cv_folds,
+                    folds=folds,
                     stratified=False,
                     verbose_eval=False,
                     seed=seed,
@@ -307,7 +347,7 @@ def opt_lightgbm(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, v
 
         if verbose > 0:
             print('Test Loss: %0.4f RMSE with %d iterations. Time elapsed %s' % (
-            loss, best_iteration, str(round(time.time() - start,2))))
+            loss, best_iteration, str(round(time.time() - start, 2))))
 
         val = {'loss': loss,  # mandatory
                'status': STATUS_OK,  # mandatory
@@ -317,11 +357,11 @@ def opt_lightgbm(X_train, y_train, cat_features=None, cv_folds=3, n_trials=20, v
 
     trials = Trials()
     hyperopt_lgb = fmin(fn=objective,
-                       space=HYPEROPT_PARAMS,
-                       algo=tpe.suggest,
-                       verbose=True if verbose > 0 else False,
-                       max_evals=n_trials,
-                       trials=trials)
+                        space=HYPEROPT_PARAMS,
+                        algo=tpe.suggest,
+                        verbose=True if verbose > 0 else False,
+                        max_evals=n_trials,
+                        trials=trials)
 
     best_params, best_n = _get_best_params(hyperopt_lgb, HYPEROPT_PARAMS, INTEGER_PARAMS_LIST, trials)
     # apparently hyperopt has a bug on choice methods
