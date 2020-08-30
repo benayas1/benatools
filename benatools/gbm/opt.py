@@ -9,6 +9,7 @@ from hyperopt import hp, Trials, STATUS_OK, fmin, tpe, anneal
 import matplotlib.pyplot as plt
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import json
+from abc import ABC, abstractmethod
 
 
 def _get_best_params(best, params, int_params, trials):
@@ -462,111 +463,16 @@ def _get_params(library, device='GPU'):
                 }, ['max_depth', 'seed', 'bagging_freq','num_leaves','min_data_in_leaf']
 
 
-def opt(X_train,
-        y_train,
-        library,
-        cat_features=None,
-        cv_folds=3,
-        folds=None,
-        n_trials=20,
-        verbose=0,
-        params=None,
-        device='GPU',
-        max_rounds=5000,
-        seed=0,
-        early_stopping=20,
-        figsize=(15, 6),
-        savepath=None):
-    """
-        Performs n_trials using Hyperopt to obtain the best LightGBM parameters
-
-        Inputs:
-            X_train, y_train, cat_features: Data to build Pool object
-            cv_folds: number of CV folds for validation on each trial
-            folds: Custom splitting indices. This parameter has the highest priority among other data split parameters.
-            n_trials: number of trials to perform
-            verbose: 0 = no log and no plot, 1 = log but no plot, 2 = log and plot
-            params: dict to override the Hyperopt params
-            device: 'gpu' of 'cpu' (lowercase)
-            max_rounds: max number of iterations to train every trial
-            seed: random state seed
-            early_stopping: early stopping rounds
-
-        Outputs:
-            dict that contains the best params and the best number of iterations
-        """
-
-    train_params, int_params = _get_params(library, early_stopping, device)
-    train_params = _update_params(train_params, params)
-
-    # Catboost specifics
+def get_optimizer(library, device='GPU', override_params=None):
     if library == 'CB':
-        # Catboost dataset
-        train_pool = cb.Pool(data=X_train, label=y_train, cat_features=cat_features)
-
-        # If folds already provided, set cv_folds to None
-        if folds:
-            cv_folds = None
-
-    def objective(params):
-        start = time.time()
-
-        # Control Integer Params don't go float
-        for par_name in int_params:
-            params[par_name] = int(np.round(params[par_name]))
-
-        cv = cb.cv(pool=train_pool,
-                   params=params,
-                   iterations=max_rounds,
-                   nfold=cv_folds,
-                   inverted=False,
-                   shuffle=True,
-                   verbose=False,
-                   seed=seed,
-                   early_stopping_rounds=early_stopping,
-                   folds=folds,
-                   as_pandas=True)
-
-        # Metric to extract the loss from
-        test_loss = 'test-RMSE-mean'
-        train_loss = 'train-RMSE-mean'
-        best_iteration = cv[test_loss].idxmin()
-        test_loss_value = cv[test_loss].iloc[best_iteration]
-        train_loss_value = cv[train_loss].iloc[best_iteration]
-
-        if verbose > 0:
-            print('Train Loss: %0.4f, Test Loss: %0.4f RMSE with %d iterations. Time elapsed %s' % (
-                train_loss_value, test_loss_value, best_iteration, str(round(time.time() - start,2))))
-
-        val = {'loss': test_loss_value,  # mandatory
-               'status': STATUS_OK,  # mandatory
-               'best_n_iters': best_iteration}
-
-        return val
-
-    trials = Trials()
-    hyperopt_f = fmin(fn=objective,
-                      space=train_params,
-                      algo=tpe.suggest,
-                      verbose=True if verbose > 0 else False,
-                      max_evals=n_trials,
-                      trials=trials)
-
-    best_params, best_n = _get_best_params(hyperopt_f, train_params, int_params, trials)
-
-    # Plot results
-    if verbose == 2:
-        _evaluation_plot(trials.losses(), figsize=figsize)
-
-    best = {'params': best_params, 'n': best_n}
-
-    if savepath:
-        _save_json(best, savepath)
-
-    return best
+        return OptimizerCB(device, override_params=override_params)
+    if library == 'XGB':
+        return OptimizerXGB(device, override_params=override_params)
+    if library == 'LGB':
+        return OptimizerLGB(device, override_params=override_params)
 
 
-class GBMOptimizer:
+class BaseOptimizer(ABC):
     def __init__(self, library, device='GPU', override_params=None):
         self.library = library
 
@@ -576,13 +482,33 @@ class GBMOptimizer:
     def optimize(self,
                  X_train,
                  y_train,
-                 objective=None,
                  cat_features=None,
+                 objective=None,
                  verbose=1,
                  max_evals=100,
                  max_rounds=5000,
                  early_stopping=50,
                  savepath=None):
+        """
+        Performs max_evals using Hyperopt to obtain the best parameters
+
+        Inputs:
+            X_train, y_train, cat_features: Data to build Pool object
+            objective: objective function to minimize. If None, takes standard function
+            cv_folds: number of CV folds for validation on each trial
+            folds: Custom splitting indices. This parameter has the highest priority among other data split parameters.
+
+            verbose: 0 = no log, 1 = log
+            max_evals: number of trials to perform
+            max_rounds: max number of iterations to train every trial
+            seed: random state seed
+            early_stopping: early stopping rounds
+            savepath: json path to save the best results
+
+        Outputs:
+            dict that contains the best params and the best number of iterations
+        """
+
 
         # Build objective function
         if objective is None:
@@ -653,21 +579,23 @@ class GBMOptimizer:
         if verbose > 0:
             print('Best parameters saved to ' + path)
 
+    @abstractmethod
     def _get_obj(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50, seed=0, verbose=1):
-        if self.library == 'CB':
-            return self._get_obj_CB(X_train, y_train, cat_features, n_folds, folds, max_rounds, early_stopping, seed, verbose)
-        if self.library == 'XGB':
-            return self._get_obj_XGB(X_train, y_train, cat_features, n_folds, folds, max_rounds, early_stopping, seed, verbose)
-        if self.library == 'LGB':
-            return self._get_obj_LGB(X_train, y_train, cat_features, n_folds, folds, max_rounds, early_stopping, seed, verbose)
+        pass
 
-    def _get_obj_CB(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50, seed=0, verbose=1):
+
+class OptimizerCB(BaseOptimizer):
+    def __init__(self, device='GPU', override_params=None):
+        self.library = 'CB'
+        super(OptimizerCB, self).__init__(device, override_params)
+
+    def get_obj(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50, seed=0, verbose=1):
         # Catboost dataset
         train_pool = cb.Pool(data=X_train, label=y_train, cat_features=cat_features)
 
         # If folds already provided, set cv_folds to None
         if folds:
-            cv_folds = None
+            n_folds = None
 
         # Objective function for Hyperopt
         def objective_f(params):
@@ -705,10 +633,16 @@ class GBMOptimizer:
                    'best_n_iters': best_iteration}
 
             return val
-
         return objective_f
 
-    def _get_obj_XGB(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50, seed=0, verbose=1):
+
+class OptimizerXGB(BaseOptimizer):
+    def __init__(self, device='GPU', override_params=None):
+        self.library = 'XGB'
+        super(OptimizerXGB, self).__init__(device, override_params)
+
+    def get_obj(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50,
+                seed=0, verbose=1):
 
         # Transform categorical features to one_hot
         if cat_features:
@@ -752,7 +686,14 @@ class GBMOptimizer:
 
         return objective_f
 
-    def _get_obj_LGB(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50, seed=0, verbose=1):
+
+class OptimizerLGB(BaseOptimizer):
+    def __init__(self, device='CPU', override_params=None):
+        self.library = 'LGB'
+        super(OptimizerLGB, self).__init__(device, override_params)
+
+    def get_obj(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50,
+                seed=0, verbose=1):
         def objective_f(params):
             start = time.time()
 
@@ -787,8 +728,8 @@ class GBMOptimizer:
                    'best_n_iters': best_iteration}
 
             return val
-        return objective_f
 
+        return objective_f
 
 
 
