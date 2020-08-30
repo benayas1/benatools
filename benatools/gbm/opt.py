@@ -512,7 +512,7 @@ class BaseOptimizer(ABC):
 
         # Build objective function
         if objective is None:
-            objective = self._get_obj(X_train, y_train, cat_features, max_rounds, early_stopping)
+            objective = self.get_obj(X_train, y_train, cat_features, max_rounds, early_stopping)
 
         # Run the optimization
         self.trials = Trials()
@@ -580,7 +580,7 @@ class BaseOptimizer(ABC):
             print('Best parameters saved to ' + path)
 
     @abstractmethod
-    def _get_obj(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50, seed=0, verbose=1):
+    def get_obj(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50, seed=0, verbose=1):
         pass
 
 
