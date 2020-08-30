@@ -162,14 +162,14 @@ def opt_catboost(X_train,
         return val
 
     trials = Trials()
-    hyperopt_cb = fmin(fn=objective,
-                       space=HYPEROPT_PARAMS,
-                       algo=tpe.suggest,
-                       verbose=True if verbose > 0 else False,
-                       max_evals=n_trials,
-                       trials=trials)
+    hyperopt_f = fmin(fn=objective,
+                      space=HYPEROPT_PARAMS,
+                      algo=tpe.suggest,
+                      verbose=True if verbose > 0 else False,
+                      max_evals=n_trials,
+                      trials=trials)
 
-    best_params, best_n = _get_best_params(hyperopt_cb, HYPEROPT_PARAMS, INTEGER_PARAMS_LIST, trials)
+    best_params, best_n = _get_best_params(hyperopt_f, HYPEROPT_PARAMS, INTEGER_PARAMS_LIST, trials)
 
     # Plot results
     if verbose == 2:
@@ -276,14 +276,14 @@ def opt_xgboost(X_train,
         return val
 
     trials = Trials()
-    hyperopt_xgb = fmin(fn=objective,
-                        space=HYPEROPT_PARAMS,
-                        algo=tpe.suggest,
-                        verbose=True if verbose > 0 else False,
-                        max_evals=n_trials,
-                        trials=trials)
+    hyperopt_f = fmin(fn=objective,
+                      space=HYPEROPT_PARAMS,
+                      algo=tpe.suggest,
+                      verbose=True if verbose > 0 else False,
+                      max_evals=n_trials,
+                      trials=trials)
 
-    best_params, best_n = _get_best_params(hyperopt_xgb, HYPEROPT_PARAMS, INTEGER_PARAMS_LIST, trials)
+    best_params, best_n = _get_best_params(hyperopt_f, HYPEROPT_PARAMS, INTEGER_PARAMS_LIST, trials)
 
     # Plot results
     if verbose == 2:
@@ -350,7 +350,6 @@ def opt_lightgbm(X_train,
     HYPEROPT_PARAMS = _update_params(HYPEROPT_PARAMS, params)
     INTEGER_PARAMS_LIST = ['max_depth', 'seed', 'bagging_freq','num_leaves','min_data_in_leaf']
 
-
     def objective(params):
         start = time.time()
 
@@ -387,14 +386,14 @@ def opt_lightgbm(X_train,
         return val
 
     trials = Trials()
-    hyperopt_lgb = fmin(fn=objective,
-                        space=HYPEROPT_PARAMS,
-                        algo=tpe.suggest,
-                        verbose=True if verbose > 0 else False,
-                        max_evals=n_trials,
-                        trials=trials)
+    hyperopt_f = fmin(fn=objective,
+                      space=HYPEROPT_PARAMS,
+                      algo=tpe.suggest,
+                      verbose=True if verbose > 0 else False,
+                      max_evals=n_trials,
+                      trials=trials)
 
-    best_params, best_n = _get_best_params(hyperopt_lgb, HYPEROPT_PARAMS, INTEGER_PARAMS_LIST, trials)
+    best_params, best_n = _get_best_params(hyperopt_f, HYPEROPT_PARAMS, INTEGER_PARAMS_LIST, trials)
     # apparently hyperopt has a bug on choice methods
     # best_params['num_leaves'] = 2 ** (best_params['num_leaves']+3) - 1
     # best_params['min_data_in_leaf'] = 2 ** (best_params['min_data_in_leaf']+3) - 1
@@ -410,3 +409,177 @@ def opt_lightgbm(X_train,
         _save_json(best, savepath)
 
     return best
+
+
+def _get_params(library, early_stopping=None, device='GPU'):
+    if library == 'CB':
+        return {'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(0.3)),
+                'random_state': hp.choice('random_state', [0, 1, 2, 3]),
+                'l2_leaf_reg': hp.loguniform('l2_leaf_reg', 0, np.log(20)),  # eg_lambda
+                'bagging_temperature': hp.uniform('bagging_temperature', 0, 1),
+                'random_strength': hp.uniform('random_strength', 0.5, 3),
+                'depth': hp.quniform('depth', 2, 8, 2),  # 10,
+                'rsm': hp.uniform('rsm', 0.1, 0.9) if device != 'GPU' else None,  # colsample_bylevel
+                'loss_function': 'RMSE',
+                'eval_metric': 'RMSE',
+                'max_bin': hp.qloguniform('max_bin', np.log(32), np.log(64), 5),  # border count
+                'od_type': 'Iter',  # 'IncToDec',  # 'Iter'
+                'od_wait': early_stopping,
+                'task_type': device # GPU devices
+                # 'devices':0 # GPU device ID
+                }, ['depth', 'max_bin', 'random_state']
+
+    if library == 'XGB':
+        return {'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(0.3)),
+                'gamma': hp.quniform('gamma', 0, 0.5, 0.1),
+                'max_depth': hp.quniform('max_depth', 2, 10, 2),  # 10,
+                'min_child_weight': hp.quniform('min_child_weight', 1, 8, 2),
+                'loss_function': 'rmse',
+                'eval_metric': 'rmse',
+                'lambda': hp.loguniform('lambda', 0, np.log(20)),
+                'alpha': hp.loguniform('alpha', 0, np.log(100)),
+                'subsample': hp.uniform('subsample', 0.2, 0.8),
+                'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 1, ),
+                'bagging_temperature': hp.uniform('bagging_temperature', 0, 1),
+                'seed': hp.choice('seed', [0, 1, 2, 3]),
+                'gpu_id': 0,
+                'tree_method': 'gpu_hist' if device == 'GPU' else 'auto'
+                }, ['max_depth', 'seed']
+
+    if library == 'LGB':
+        return {'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(0.3)),
+                'num_leaves': hp.qloguniform('num_leaves', np.log(32), np.log(256), 5),
+                'max_depth': hp.quniform('max_depth', 2, 10, 2),  # 10,
+                'min_data_in_leaf': hp.qloguniform('min_data_in_leaf', np.log(32), np.log(256), 5),
+                # 'min_child_weight': hp.loguniform('min_child_weight', -16, 5)
+                'bagging_fraction': hp.uniform('bagging_fraction', 0.2, 0.9),
+                'bagging_freq': hp.uniform('bagging_freq', 1, 10),
+                'feature_fraction': hp.uniform('feature_fraction', 0.2, 0.9),
+                'lambda_l1': hp.loguniform('lambda_l1', 0, np.log(100)),
+                'lambda_l2': hp.loguniform('lambda_l2', 0, np.log(20)),
+                # 'max_bin': hp.qloguniform('max_bin', np.log(32), np.log(64), 5), # border count,
+                'metric': 'rmse',
+                'seed': hp.choice('seed', [0, 1, 2, 3]),
+                'num_threads': 5,
+                # 'gpu_id': 0,
+                'device_type': device.lower()
+                }, ['max_depth', 'seed', 'bagging_freq','num_leaves','min_data_in_leaf']
+
+
+def _call_cv(library, params, int_params):
+    return
+
+
+def opt(X_train,
+        y_train,
+        library,
+        cat_features=None,
+        cv_folds=3,
+        folds=None,
+        n_trials=20,
+        verbose=0,
+        params=None,
+        device='GPU',
+        max_rounds=5000,
+        seed=0,
+        early_stopping=20,
+        figsize=(15, 6),
+        savepath=None):
+    """
+        Performs n_trials using Hyperopt to obtain the best LightGBM parameters
+
+        Inputs:
+            X_train, y_train, cat_features: Data to build Pool object
+            cv_folds: number of CV folds for validation on each trial
+            folds: Custom splitting indices. This parameter has the highest priority among other data split parameters.
+            n_trials: number of trials to perform
+            verbose: 0 = no log and no plot, 1 = log but no plot, 2 = log and plot
+            params: dict to override the Hyperopt params
+            device: 'gpu' of 'cpu' (lowercase)
+            max_rounds: max number of iterations to train every trial
+            seed: random state seed
+            early_stopping: early stopping rounds
+
+        Outputs:
+            dict that contains the best params and the best number of iterations
+        """
+
+    train_params, int_params = _get_params(library, early_stopping, device)
+    train_params = _update_params(train_params, params)
+
+    # Catboost specifics
+    if library == 'CB':
+        # Catboost dataset
+        train_pool = cb.Pool(data=X_train, label=y_train, cat_features=cat_features)
+
+        # If folds already provided, set cv_folds to None
+        if folds:
+            cv_folds = None
+
+    def objective(params):
+        start = time.time()
+
+        # Control Integer Params don't go float
+        for par_name in int_params:
+            params[par_name] = int(np.round(params[par_name]))
+
+        cv = cb.cv(pool=train_pool,
+                   params=params,
+                   iterations=max_rounds,
+                   nfold=cv_folds,
+                   inverted=False,
+                   shuffle=True,
+                   verbose=False,
+                   seed=seed,
+                   early_stopping_rounds=early_stopping,
+                   folds=folds,
+                   as_pandas=True)
+
+        # Metric to extract the loss from
+        test_loss = 'test-RMSE-mean'
+        train_loss = 'train-RMSE-mean'
+        best_iteration = cv[test_loss].idxmin()
+        test_loss_value = cv[test_loss].iloc[best_iteration]
+        train_loss_value = cv[train_loss].iloc[best_iteration]
+
+        if verbose > 0:
+            print('Train Loss: %0.4f, Test Loss: %0.4f RMSE with %d iterations. Time elapsed %s' % (
+                train_loss_value, test_loss_value, best_iteration, str(round(time.time() - start,2))))
+
+        val = {'loss': test_loss_value,  # mandatory
+               'status': STATUS_OK,  # mandatory
+               'best_n_iters': best_iteration}
+
+        return val
+
+    trials = Trials()
+    hyperopt_f = fmin(fn=objective,
+                      space=train_params,
+                      algo=tpe.suggest,
+                      verbose=True if verbose > 0 else False,
+                      max_evals=n_trials,
+                      trials=trials)
+
+    best_params, best_n = _get_best_params(hyperopt_f, train_params, int_params, trials)
+
+    # Plot results
+    if verbose == 2:
+        _evaluation_plot(trials.losses(), figsize=figsize)
+
+    best = {'params': best_params, 'n': best_n}
+
+    if savepath:
+        _save_json(best, savepath)
+
+    return best
+
+
+class GBMOptimizer:
+    def __init__(self, library, device=None, early_stopping=None, override_params=None):
+        self.library = library
+
+        self.training_params, self.int_params = _get_params(library, early_stopping, device)
+        self.training_params = _update_params(self.training_params, override_params)
+
+    def optimize(self):
+        return

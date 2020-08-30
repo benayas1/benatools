@@ -7,11 +7,24 @@ import scipy as sp
 import time
 import gc
 import sklearn.metrics as mt
+import category_encoders as ce
+
+
+class _Folds:
+    def __init__(self, folds):
+        self.indices = folds
+
+    def split(self, X=None, y=None, groups=None):
+        for i in range(len(self.indices)):
+            yield self.indices[i]
+
+    def get_n_splits(self):
+        return len(self.indices)
 
 
 # Class to hold and train many models (CB, XGB and LGB) on the same dataset
 class GBMFitter:
-    def __init__(self, cb_data=[], xgb_data=[], lgb_data=[], cv_strategy=None, cv_groups=None, use_rounders=False, metrics=['rmse']):
+    def __init__(self, cb_data=None, xgb_data=None, lgb_data=None, cv_strategy=None, cv_groups=None, use_rounders=False, metrics=['rmse'], verbose=1, logfile=None):
         """Generates models in a CV manner for all 3 libraries algorithms
 
         Inputs:
@@ -25,18 +38,26 @@ class GBMFitter:
         self.training_data = {'CB': cb_data, 'XGB': xgb_data, 'LGB': lgb_data}
         self.models = {'CB': [], 'XGB': [], 'LGB': []}  # for each category, generates folds models
         self.rounders = {'CB': [], 'XGB': [], 'LGB': []}
-        self.oof = {'CB': []}
+        self.oof = {'CB': [], 'XGB': [], 'LGB': []}
         self.fselection = {}
-        self.cv = cv_strategy
+
         self.cv_groups = cv_groups
         self.use_rounders = use_rounders
         self.metrics = metrics
+
+        if isinstance(cv_strategy, list):
+            self.cv = _Folds(cv_strategy)
+        else:
+            self.cv = cv_strategy
+
+        self.verbose = verbose
+        self.logfile = logfile
 
     def _get_categorical_index(self, df, cat_cols):
         cat_features_index = np.where(df.columns.isin(cat_cols))[0].tolist()
         return cat_features_index
 
-    def fit(self, X, y, categorical=[], feature_selection=-1, skip_CB=False, skip_XGB=False, skip_LGB=False):
+    def fit(self, X, y, categorical=None, feature_selection=-1, skip_CB=False, skip_XGB=False, skip_LGB=False):
         """Generates models in a CV manner for all 3 libraries algorithms
 
         Inputs:
@@ -47,16 +68,16 @@ class GBMFitter:
             - feature_selection: the threshold to select features. If -1, takes all"""
 
         # Fits the data for each library algorithm
-        if skip_CB == False:
+        if not skip_CB:
             self._fit('CB', X, y, categorical, feature_selection)
 
-        if skip_XGB == False:
+        if not skip_XGB:
             self._fit('XGB', X, y, categorical, feature_selection)
 
-        if skip_LGB == False:
+        if not skip_LGB:
             self._fit('LGB', X, y, categorical, feature_selection)
 
-    def _fit(self, library, X, y, categorical=[], feature_selection=-1):
+    def _fit(self, library, X, y, categorical=None, feature_selection=-1):
         """ Fits data into the algorithms. Generates a model per fold, and stores a
         tuple of (model, rounder) into self.models for each fold.
 
@@ -71,12 +92,12 @@ class GBMFitter:
         if not self.training_data[library]:
             return
 
-        print("Training " + library + " models")
+        self.log("Training " + library + " models")
         start = time.time()
         for model in self.training_data[library]:
             # Perform Feature Selection
             if feature_selection > 0:
-                print("\tFeature Selection for " + library + " models")
+                self.log("\tFeature Selection for " + library + " models")
                 fselection = select_features(library)
                 fselection.fit(self._train(library, model, X, y, categorical)[0], feature_selection)
                 self.fselection[library] = fselection
@@ -84,11 +105,11 @@ class GBMFitter:
 
             # Training for CV
             if self.cv is not None:
-                print("\tTraining with " + str(self.cv.get_n_splits()) + " folds")
+                self.log("\tTraining with " + str(self.cv.get_n_splits()) + " folds")
                 # Perform CV
                 y_pred = np.zeros(X_data.shape[0])
                 for f, (train_index, val_index) in enumerate(self.cv.split(X_data, y, self.cv_groups)):
-                    print("\t\tTraining fold {} ".format(f))
+                    self.log("\t\tTraining fold {} ".format(f))
                     y_pred[val_index] = self._train(library,
                                                     model,
                                                     train=(X_data.iloc[train_index], y.iloc[train_index]),
@@ -100,7 +121,7 @@ class GBMFitter:
                         value = mt.mean_squared_error(y, y_pred, squared=False)
                     else:
                         value = metric(y, y_pred)
-                    print("\t\tOOF Validation Metric: {:.4f}, total time elapsed {}".format(value, str(round(time.time() - start, 2))))
+                    self.log("\t\tOOF Validation Metric: {:.4f}, total time elapsed {}".format(value, str(round(time.time() - start, 2))))
 
                 # save OOF results
                 self.oof[library].append(y_pred)
@@ -131,6 +152,11 @@ class GBMFitter:
 
         if self.use_rounders:
             rounder = OptRounder()
+
+        obj = model_data['obj'] if 'obj' in model_data else None  # Objective function
+        num_boost_rounds = model_data['n'] if 'n' in model_data else 5000  # Num rounds
+        early_stopping = model_data['es'] if 'es' in model_data else None  # Early Stopping
+
             
         # Train and predict train and validation sets
         if library == 'CB':
@@ -139,17 +165,25 @@ class GBMFitter:
                                         cat_features=self._get_categorical_index(X_train, categorical)),
                          params=model_data['params'],
                          logging_level='Silent',
-                         num_boost_round=model_data['n'])
+                         num_boost_round=num_boost_rounds,
+                         early_stopping=early_stopping,
+                         eval_set=cb.Pool(data=X_val,
+                                          label=y_val,
+                                          cat_features=self._get_categorical_index(X_train, categorical)) if early_stopping else None,
+                         verbose_eval=False)
             y_pred_train = m.predict(X_train)
             y_pred_val = m.predict(X_val)
 
         if library == 'XGB':
-            obj = None
-            if 'obj' in model_data:
-                obj = model_data['obj']
+            if cat_features:
+                X_train = ce.one_hot.OneHotEncoder(cols=cat_features, drop_invariant=True).fit_transform(X_train)
+
             m = xgb.train(params=model_data['params'],
                           dtrain=xgb.DMatrix(X_train, y_train),
-                          num_boost_round=model_data['n'],
+                          num_boost_round=num_boost_rounds,
+                          early_stopping_rounds=early_stopping,
+                          evals=[(xgb.DMatrix(X_train, y_train), 'Validation')] if early_stopping else None,
+                          verbose_eval=False,
                           obj=obj)
             y_pred_train = m.predict(xgb.DMatrix(X_train))
             y_pred_val = m.predict(xgb.DMatrix(X_val))
@@ -160,17 +194,22 @@ class GBMFitter:
             m.load_model('xgb_temp')
 
         if library == 'LGB':
-            obj = None
-            if 'obj' in model_data:
-                obj = model_data['obj']
             m = lgb.train(params=model_data['params'],
                           train_set=lgb.Dataset(X_train,
                                                 label=y_train,
                                                 free_raw_data=False),
                           categorical_feature=self._get_categorical_index(X_train,
                                                                           categorical) if categorical else 'auto',
-                          num_boost_round=model_data['n'],
-                          fobj=obj)
+                          num_boost_round=num_boost_rounds,
+                          fobj=obj,
+                          early_stopping_rounds=early_stopping,
+                          valid_sets=[lgb.Dataset(X_val,
+                                                 label=y_val,
+                                                 free_raw_data=False)] if early_stopping else None,
+                          valid_names=['Validation'] if early_stopping else None,
+                          verbose_eval=False,
+                          )
+            # Predict validation dataset to get train result and OOF validation result
             y_pred_train = m.predict(X_train)
             y_pred_val = m.predict(X_val)
 
@@ -180,7 +219,7 @@ class GBMFitter:
             y_pred_train = rounder.predict(y_pred_train)
             y_pred_val = rounder.predict(y_pred_val)
 
-        # Evaluate Train
+        # Calculate metrics
         for metric in self.metrics:
             if metric == 'rmse':
                 train_metric = mt.mean_squared_error(y_train, y_pred_train, squared=False)
@@ -188,6 +227,7 @@ class GBMFitter:
             else:
                 train_metric = metric(y_train, y_pred_train)
                 val_metric = metric(y_val, y_pred_val)
+
         # acc_train = accuracy_score(y_train, y_pred_train)
         # f1_train = f1_score(y_train, y_pred_train, average='macro')
 
@@ -196,7 +236,7 @@ class GBMFitter:
         # f1 = f1_score(y_val, y_pred_val, average='macro')
 
         # print("\t\t\tTrain Accuracy: {:.4f}, Train F1: {:.4f}, Val Accuracy: {:.4f}, Val F1: {:.4f},  elapsed {}".format( acc_train, f1_train, acc, f1, str(time.time() - start)) )
-        print("\t\t\tTrain Metric: {:.4f}, OOF Val Metric: {:.4f}, elapsed {}".format(train_metric, val_metric,
+        self.log("\t\t\tTrain Metric: {:.4f}, OOF Val Metric: {:.4f}, elapsed {}".format(train_metric, val_metric,
                                                                                   str(round(time.time() - start, 2))))
 
         # Store model and rounder if needed
@@ -277,6 +317,17 @@ class GBMFitter:
             df['mean'] = df.apply(mean_function, axis=1)
 
         return df
+
+    def log(self, message):
+        """ Log training ouput into console and file
+            input:
+                message: message to be logged
+        """
+        if self.verbose > 0:
+            print(message)
+        if self.logfile:
+            with open(self.logfile, 'a+') as logger:
+                logger.write(f'{message}\n')
 
 
 def select_features(library):
