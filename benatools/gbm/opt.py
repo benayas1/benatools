@@ -476,7 +476,7 @@ class BaseOptimizer(ABC):
     def __init__(self, library, device='GPU', override_params=None):
         self.library = library
 
-        self.training_params, self.int_params = _get_params(library, device)
+        self.training_params, self.int_params = _get_params(self.library, device)
         self.training_params = _update_params(self.training_params, override_params)
 
     def optimize(self,
@@ -488,6 +488,8 @@ class BaseOptimizer(ABC):
                  max_evals=100,
                  max_rounds=5000,
                  early_stopping=50,
+                 n_folds=5,
+                 folds=None,
                  savepath=None):
         """
         Performs max_evals using Hyperopt to obtain the best parameters
@@ -512,7 +514,7 @@ class BaseOptimizer(ABC):
 
         # Build objective function
         if objective is None:
-            objective = self.get_obj(X_train, y_train, cat_features, max_rounds, early_stopping)
+            objective = self.get_obj(X_train, y_train, cat_features=cat_features, n_folds=n_folds, folds=folds,  max_rounds=max_rounds, early_stopping=early_stopping)
 
         # Run the optimization
         self.trials = Trials()
@@ -586,8 +588,7 @@ class BaseOptimizer(ABC):
 
 class OptimizerCB(BaseOptimizer):
     def __init__(self, device='GPU', override_params=None):
-        self.library = 'CB'
-        super(OptimizerCB, self).__init__(device, override_params)
+        super(OptimizerCB, self).__init__('CB', device, override_params)
 
     def get_obj(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50, seed=0, verbose=1):
         # Catboost dataset
@@ -638,8 +639,7 @@ class OptimizerCB(BaseOptimizer):
 
 class OptimizerXGB(BaseOptimizer):
     def __init__(self, device='GPU', override_params=None):
-        self.library = 'XGB'
-        super(OptimizerXGB, self).__init__(device, override_params)
+        super(OptimizerXGB, self).__init__('XGB', device, override_params)
 
     def get_obj(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50,
                 seed=0, verbose=1):
@@ -689,8 +689,7 @@ class OptimizerXGB(BaseOptimizer):
 
 class OptimizerLGB(BaseOptimizer):
     def __init__(self, device='CPU', override_params=None):
-        self.library = 'LGB'
-        super(OptimizerLGB, self).__init__(device, override_params)
+        super(OptimizerLGB, self).__init__('LGB', device, override_params)
 
     def get_obj(self, X_train, y_train, cat_features=None, n_folds=5, folds=None, max_rounds=5000, early_stopping=50,
                 seed=0, verbose=1):
