@@ -39,6 +39,7 @@ class GBMFitter:
         self.training_data = {'CB': cb_data, 'XGB': xgb_data, 'LGB': lgb_data}
         self.models = {'CB': [], 'XGB': [], 'LGB': []}  # for each category, generates folds models
         self.rounders = {'CB': [], 'XGB': [], 'LGB': []}
+        self.ce = {'CB': [], 'XGB': [], 'LGB': []}  # categorical encoders
         self.oof = {'CB': [], 'XGB': [], 'LGB': []}
         self.fselection = {}
 
@@ -258,6 +259,8 @@ class GBMFitter:
         self.models[library].append(m)
         if self.use_rounders:
             self.rounders[library].append(rounder)
+        if library == 'XGB':
+            self.ce[library].append(encoder)
 
         return y_pred_val
 
@@ -271,7 +274,7 @@ class GBMFitter:
                 - Returns a list of Numpy arrays. One array per configuration"""
         return self.oof[library]
 
-    def predict(self, X, mean_function=None):
+    def predict(self, X, categorical=None, mean_function=None):
         """Predicts the regression value without calculating a class
 
         Inputs:
@@ -288,6 +291,12 @@ class GBMFitter:
 
         for i in range(0, len(self.models['XGB'])):
             X_data = self.fselection['XGB'].transform(X) if 'XGB' in self.fselection else X
+
+            if categorical:
+                encoder = ce.one_hot.OneHotEncoder(cols=categorical, drop_invariant=True).fit(X)
+                X_train = encoder.transform(X_train)
+                X_val = encoder.transform(X_val)
+
             df['xgb' + str(i)] = self.models['XGB'][i].predict(xgb.DMatrix(X_data))
 
         for i in range(0, len(self.models['LGB'])):
