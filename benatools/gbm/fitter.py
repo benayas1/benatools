@@ -292,9 +292,11 @@ class GBMFitter:
         for i in range(0, len(self.models['XGB'])):
             X_data = self.fselection['XGB'].transform(X) if 'XGB' in self.fselection else X
 
+            print(X_data.shape)
             if categorical:
                 encoder = self.ce['XGB'][i]
                 X_data = encoder.transform(X_data)
+                print(X_data.shape)
 
             df['xgb' + str(i)] = self.models['XGB'][i].predict(xgb.DMatrix(X_data))
 
