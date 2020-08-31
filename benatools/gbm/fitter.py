@@ -293,9 +293,8 @@ class GBMFitter:
             X_data = self.fselection['XGB'].transform(X) if 'XGB' in self.fselection else X
 
             if categorical:
-                encoder = ce.one_hot.OneHotEncoder(cols=categorical, drop_invariant=True).fit(X)
-                X_train = encoder.transform(X_train)
-                X_val = encoder.transform(X_val)
+                encoder = self.ce['XGB'][i]
+                X_data = encoder.transform(X_data)
 
             df['xgb' + str(i)] = self.models['XGB'][i].predict(xgb.DMatrix(X_data))
 
