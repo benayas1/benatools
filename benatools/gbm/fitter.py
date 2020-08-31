@@ -24,7 +24,8 @@ class _Folds:
 
 # Class to hold and train many models (CB, XGB and LGB) on the same dataset
 class GBMFitter:
-    def __init__(self, cb_data=None, xgb_data=None, lgb_data=None, cv_strategy=None, cv_groups=None, use_rounders=False, metrics=['rmse'], verbose=1, logfile=None):
+    def __init__(self, cb_data=None, xgb_data=None, lgb_data=None, cv_strategy=None, cv_groups=None, use_rounders=False,
+                 metrics=['rmse'], verbose=1, logfile=None):
         """Generates models in a CV manner for all 3 libraries algorithms
 
         Inputs:
@@ -53,11 +54,14 @@ class GBMFitter:
         self.verbose = verbose
         self.logfile = logfile
 
-    def _get_categorical_index(self, df, cat_cols):
+    def _get_categorical_index(self, df, cat_cols=None):
+        if cat_cols is None:
+            return []
         cat_features_index = np.where(df.columns.isin(cat_cols))[0].tolist()
         return cat_features_index
 
-    def fit(self, X, y, categorical=None, feature_selection=-1, skip_CB=False, skip_XGB=False, skip_LGB=False):
+    def fit(self, X, y, categorical=None, feature_selection=-1, skip_CB=False, skip_XGB=False, skip_LGB=False, num_boost_rounds=5000,
+            early_stopping=None):
         """Generates models in a CV manner for all 3 libraries algorithms
 
         Inputs:
@@ -69,15 +73,15 @@ class GBMFitter:
 
         # Fits the data for each library algorithm
         if not skip_CB:
-            self._fit('CB', X, y, categorical, feature_selection)
+            self._fit('CB', X, y, categorical, feature_selection, num_boost_rounds, early_stopping)
 
         if not skip_XGB:
-            self._fit('XGB', X, y, categorical, feature_selection)
+            self._fit('XGB', X, y, categorical, feature_selection, num_boost_rounds, early_stopping)
 
         if not skip_LGB:
-            self._fit('LGB', X, y, categorical, feature_selection)
+            self._fit('LGB', X, y, categorical, feature_selection, num_boost_rounds, early_stopping)
 
-    def _fit(self, library, X, y, categorical=None, feature_selection=-1):
+    def _fit(self, library, X, y, categorical=None, feature_selection=-1, num_boost_rounds=5000, early_stopping=None):
         """ Fits data into the algorithms. Generates a model per fold, and stores a
         tuple of (model, rounder) into self.models for each fold.
 
@@ -87,7 +91,10 @@ class GBMFitter:
             - y: target variable
             - categorical: a list of categorical variables
             - folds: Number of folds for CV
-            - feature_selection: the threshold to select features. If -1, takes all"""
+            - feature_selection: the threshold to select features. If -1, takes all
+            - num_boost_rounds: Default boosting rounds
+            - early_stopping: Default early_stopping
+        """
 
         if not self.training_data[library]:
             return
@@ -114,14 +121,17 @@ class GBMFitter:
                                                     model,
                                                     train=(X_data.iloc[train_index], y.iloc[train_index]),
                                                     validation=(X_data.iloc[val_index], y.iloc[val_index]),
-                                                    categorical=categorical)
+                                                    categorical=categorical,
+                                                    num_boost_rounds=num_boost_rounds,
+                                                    early_stopping=early_stopping)
                 # Print CV metric
                 for metric in self.metrics:
                     if metric == 'rmse':
                         value = mt.mean_squared_error(y, y_pred, squared=False)
                     else:
                         value = metric(y, y_pred)
-                    self.log("\t\tOOF Validation Metric: {:.4f}, total time elapsed {}".format(value, str(round(time.time() - start, 2))))
+                    self.log("\t\tOOF Validation Metric: {:.4f}, total time elapsed {}".format(value, str(
+                        round(time.time() - start, 2))))
 
                 # save OOF results
                 self.oof[library].append(y_pred)
@@ -130,7 +140,7 @@ class GBMFitter:
             else:
                 self._train(library, model, X_data, y, categorical)  # TODO to be tested
 
-    def _train(self, library, model_data, train, validation=None, categorical=[]):
+    def _train(self, library, model_data, train, validation=None, categorical=[], num_boost_rounds=5000, early_stopping=None):
         """ Trains a mode on training data, calculates predictions for training and for validation,
         and also creates and fits the corresponding OptRounder object.
 
@@ -140,6 +150,8 @@ class GBMFitter:
             - train: Tuple with train data, train[0] is X and train[1] is y
             - validation: Validation data, validation[0] is X and validation[1] is y
             - categorical: List with the categorical variables
+            - num_boost_rounds: Default boosting rounds. Could be overriden by individual values in model_data['n]
+            - early_stopping: Default early_stopping. Could be overriden by individual values in model_data['es']
             """
 
         # Get train and validation sets
@@ -154,35 +166,37 @@ class GBMFitter:
             rounder = OptRounder()
 
         obj = model_data['obj'] if 'obj' in model_data else None  # Objective function
-        num_boost_rounds = model_data['n'] if 'n' in model_data else 5000  # Num rounds
-        early_stopping = model_data['es'] if 'es' in model_data else None  # Early Stopping
+        num_boost_rounds = model_data['n'] if 'n' in model_data else num_boost_rounds  # Num rounds
+        early_stopping = model_data['es'] if 'es' in model_data else early_stopping  # Early Stopping
 
-            
         # Train and predict train and validation sets
         if library == 'CB':
             m = cb.train(dtrain=cb.Pool(data=X_train,
                                         label=y_train,
                                         cat_features=self._get_categorical_index(X_train, categorical)),
                          params=model_data['params'],
-                         logging_level='Silent',
                          num_boost_round=num_boost_rounds,
-                         early_stopping=early_stopping,
+                         early_stopping_rounds=early_stopping,
                          eval_set=cb.Pool(data=X_val,
                                           label=y_val,
-                                          cat_features=self._get_categorical_index(X_train, categorical)) if early_stopping else None,
+                                          cat_features=self._get_categorical_index(X_train,
+                                                                                   categorical)) if early_stopping else None,
                          verbose_eval=False)
             y_pred_train = m.predict(X_train)
             y_pred_val = m.predict(X_val)
 
         if library == 'XGB':
-            if cat_features:
-                X_train = ce.one_hot.OneHotEncoder(cols=cat_features, drop_invariant=True).fit_transform(X_train)
+            if categorical:
+                train_all = pd.concat([X_train,X_val])
+                encoder = ce.one_hot.OneHotEncoder(cols=categorical, drop_invariant=True).fit(train_all)
+                X_train = encoder.transform(X_train)
+                X_val = encoder.transform(X_val)
 
             m = xgb.train(params=model_data['params'],
                           dtrain=xgb.DMatrix(X_train, y_train),
                           num_boost_round=num_boost_rounds,
                           early_stopping_rounds=early_stopping,
-                          evals=[(xgb.DMatrix(X_train, y_train), 'Validation')] if early_stopping else None,
+                          evals=[(xgb.DMatrix(X_train, y_train), 'Validation')] if early_stopping else [],
                           verbose_eval=False,
                           obj=obj)
             y_pred_train = m.predict(xgb.DMatrix(X_train))
@@ -204,8 +218,8 @@ class GBMFitter:
                           fobj=obj,
                           early_stopping_rounds=early_stopping,
                           valid_sets=[lgb.Dataset(X_val,
-                                                 label=y_val,
-                                                 free_raw_data=False)] if early_stopping else None,
+                                                  label=y_val,
+                                                  free_raw_data=False)] if early_stopping else None,
                           valid_names=['Validation'] if early_stopping else None,
                           verbose_eval=False,
                           )
@@ -237,7 +251,8 @@ class GBMFitter:
 
         # print("\t\t\tTrain Accuracy: {:.4f}, Train F1: {:.4f}, Val Accuracy: {:.4f}, Val F1: {:.4f},  elapsed {}".format( acc_train, f1_train, acc, f1, str(time.time() - start)) )
         self.log("\t\t\tTrain Metric: {:.4f}, OOF Val Metric: {:.4f}, elapsed {}".format(train_metric, val_metric,
-                                                                                  str(round(time.time() - start, 2))))
+                                                                                         str(round(time.time() - start,
+                                                                                                   2))))
 
         # Store model and rounder if needed
         self.models[library].append(m)
