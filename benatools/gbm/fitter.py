@@ -193,12 +193,6 @@ class GBMFitter:
             y_pred_val = m.predict(X_val)
 
         if library == 'XGB':
-            if categorical:
-                train_all = pd.concat([X_train,X_val])
-                encoder = ce.one_hot.OneHotEncoder(cols=categorical, drop_invariant=True).fit(train_all)
-                X_train = encoder.transform(X_train)
-                X_val = encoder.transform(X_val)
-
             m = xgb.train(params=model_data['params'],
                           dtrain=xgb.DMatrix(X_train, y_train),
                           num_boost_round=num_boost_rounds,
