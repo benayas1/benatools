@@ -43,8 +43,7 @@ class TorchFitter:
                  folder='models',
                  verbose=0,
                  validation_scheduler=True,
-                 step_scheduler=False,
-                 early_stopping=0):
+                 step_scheduler=False):
 
         if type(loss) == type:
             self.loss_function = loss()
@@ -80,13 +79,11 @@ class TorchFitter:
 
         self.scheduler = scheduler_class(self.optimizer, **scheduler_params)
 
-        self.early_stopping = early_stopping
-
         self.validation_scheduler = validation_scheduler  # do scheduler.step after validation stage loss
         self.step_scheduler = step_scheduler  # do scheduler.step after optimizer.step
         self.log(f'Fitter prepared. Device is {self.device}')
 
-    def fit(self, train_loader, validation_loader):
+    def fit(self, train_loader, validation_loader, early_stopping=0, metric=None, metric_kwargs=None, early_stopping_mode='min'):
         """ Fits a model
 
         Inputs:
@@ -119,31 +116,49 @@ class TorchFitter:
 
             # Run epoch validation
             t = time.time()
-            summary_loss = self.validation(validation_loader)
+            summary_loss, calculated_metric = self.validation(validation_loader, metric, metric_kwargs)
             history['val'] = summary_loss.avg  # validation loss
             history['lr'] = self.optimizer.param_groups[0]['lr']
+            if calculated_metric:
+                history['metric'] = calculated_metric
 
             # Print validation results
             self.log(f'[RESULT]: Val. Epoch: {self.epoch}, summary_loss: {summary_loss.avg:.5f}, '
                      f'time: {(time.time() - t):.5f}')
 
             # Check if result is improved, then save model
-            if summary_loss.avg < self.best_summary_loss:
-                savepath = f'{self.base_dir}/best-checkpoint-{str(self.epoch).zfill(3)}epoch.bin'
-                print(f'Validation loss improved from {self.best_summary_loss} to '
-                      f'{summary_loss.avg} and model is saved to {savepath}')
-                self.best_summary_loss = summary_loss.avg
-                self.model.eval()
-                self.save(savepath)
-                for path in sorted(glob(f'{self.base_dir}/best-checkpoint-*epoch.bin'))[:-3]:
-                    os.remove(path)
-                es_epochs = 0  # reset early stopping count
+            if metric:
+                if (((early_stopping_mode == 'max') and (calculated_metric > self.best_summary_loss)) or
+                    ((early_stopping_mode == 'min') and (calculated_metric < self.best_summary_loss))):
+
+                    savepath = f'{self.base_dir}/best-checkpoint-{str(self.epoch).zfill(3)}epoch.bin'
+                    self.log(f'Validation metric improved from {self.best_summary_loss} to '
+                             f'{calculated_metric} and model is saved to {savepath}')
+                    self.best_summary_loss = calculated_metric
+                    self.model.eval()
+                    self.save(savepath)
+                    for path in sorted(glob(f'{self.base_dir}/best-checkpoint-*epoch.bin'))[:-3]:
+                        os.remove(path)
+                    es_epochs = 0  # reset early stopping count
+                else:
+                    es_epochs += 1
             else:
-                es_epochs += 1
+                if (summary_loss.avg < self.best_summary_loss):
+                    savepath = f'{self.base_dir}/best-checkpoint-{str(self.epoch).zfill(3)}epoch.bin'
+                    self.log(f'Validation loss improved from {self.best_summary_loss} to '
+                             f'{summary_loss.avg} and model is saved to {savepath}')
+                    self.best_summary_loss = summary_loss.avg
+                    self.model.eval()
+                    self.save(savepath)
+                    for path in sorted(glob(f'{self.base_dir}/best-checkpoint-*epoch.bin'))[:-3]:
+                        os.remove(path)
+                    es_epochs = 0  # reset early stopping count
+                else:
+                    es_epochs += 1
 
             # Check if Early Stopping condition is met
-            if (self.early_stopping > 0) & (es_epochs > self.early_stopping):
-                self.log(f'Early Stopping: {self.early_stopping} epochs with no improvement')
+            if (early_stopping > 0) & (es_epochs > early_stopping):
+                self.log(f'Early Stopping: {early_stopping} epochs with no improvement')
                 training_history.append(history)
                 break
 
@@ -155,9 +170,12 @@ class TorchFitter:
 
         return pd.DataFrame(training_history).set_index('epoch')
 
-    def validation(self, val_loader):
+    def validation(self, val_loader, metric=None, metric_kwargs=None):
         self.model.eval()
         summary_loss = AverageMeter()
+        y_preds = []
+        y_true = []
+
         t = time.time()
         for step, (images, labels) in enumerate(val_loader):
             if self.verbose > 0:
@@ -172,12 +190,20 @@ class TorchFitter:
                 images = images.to(self.device).float()
                 labels = labels.to(self.device)
 
+                if metric:
+                    y_true.extend(labels.cpu().numpy().tolist())
+
                 # just forward propagation
                 output = self.model(images)
                 loss = self.loss_function(output, labels)
                 summary_loss.update(loss.detach().item(), batch_size)
 
-        return summary_loss
+                if metric:
+                    y_preds.extend(labels.cpu().numpy().tolist())
+
+        calculated_metric = metric(y_true, y_preds, **metric_kwargs) if metric else None
+
+        return summary_loss, calculated_metric
 
     def train_one_epoch(self, train_loader):
         """ Run one epoch on the train dataset
