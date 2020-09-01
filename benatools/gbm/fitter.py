@@ -38,8 +38,6 @@ class GBMFitter:
             - use_rounders: boolean to indicate to use rounders """
         self.training_data = {'CB': cb_data, 'XGB': xgb_data, 'LGB': lgb_data}
         self.models = {'CB': [], 'XGB': [], 'LGB': []}  # for each category, generates folds models
-        self.rounders = {'CB': [], 'XGB': [], 'LGB': []}
-        self.ce = {'CB': [], 'XGB': [], 'LGB': []}  # categorical encoders
         self.oof = {'CB': [], 'XGB': [], 'LGB': []}
         self.fselection = {}
 
@@ -111,20 +109,28 @@ class GBMFitter:
                 self.fselection[library] = fselection
             X_data = self.fselection[library].transform(X) if library in self.fselection else X
 
+            # In the XGB case, categorical features must be converted to One Hot
+            encoder=None
+            if library=='XGB':
+                if categorical:
+                    encoder = ce.one_hot.OneHotEncoder(cols=categorical, drop_invariant=True).fit(X_data)
+                    X_data = encoder.transform(X_data)
+
             # Training for CV
             if self.cv is not None:
                 self.log("\tTraining with " + str(self.cv.get_n_splits()) + " folds")
                 # Perform CV
                 y_pred = np.zeros(X_data.shape[0])
                 for f, (train_index, val_index) in enumerate(self.cv.split(X_data, y, self.cv_groups)):
-                    self.log("\t\tTraining fold {} ".format(f))
+                    self.log("\t\tTraining fold {} ".format(f+1))
                     y_pred[val_index] = self._train(library,
                                                     model,
                                                     train=(X_data.iloc[train_index], y.iloc[train_index]),
                                                     validation=(X_data.iloc[val_index], y.iloc[val_index]),
                                                     categorical=categorical,
                                                     num_boost_rounds=num_boost_rounds,
-                                                    early_stopping=early_stopping)
+                                                    early_stopping=early_stopping,
+                                                    encoder=encoder)
                 # Print CV metric
                 for metric in self.metrics:
                     if metric == 'rmse':
@@ -141,7 +147,7 @@ class GBMFitter:
             else:
                 self._train(library, model, X_data, y, categorical)  # TODO to be tested
 
-    def _train(self, library, model_data, train, validation=None, categorical=[], num_boost_rounds=5000, early_stopping=None):
+    def _train(self, library, model_data, train, validation=None, categorical=[], num_boost_rounds=5000, early_stopping=None, encoder=None):
         """ Trains a mode on training data, calculates predictions for training and for validation,
         and also creates and fits the corresponding OptRounder object.
 
@@ -256,11 +262,13 @@ class GBMFitter:
                                                                                                    2))))
 
         # Store model and rounder if needed
-        self.models[library].append(m)
+        data = {'m':m}
         if self.use_rounders:
-            self.rounders[library].append(rounder)
-        if library == 'XGB':
-            self.ce[library].append(encoder)
+            data['rounder'] = rounder
+        if encoder:
+            data['encoder'] = encoder
+        self.models[library].append(data)
+
 
         return y_pred_val
 
@@ -287,22 +295,22 @@ class GBMFitter:
 
         for i in range(0, len(self.models['CB'])):
             X_data = self.fselection['CB'].transform(X) if 'CB' in self.fselection else X
-            df['cb' + str(i)] = self.models['CB'][i].predict(X_data)
+            df['cb' + str(i)] = self.models['CB'][i]['m'].predict(X_data)
 
         for i in range(0, len(self.models['XGB'])):
             X_data = self.fselection['XGB'].transform(X) if 'XGB' in self.fselection else X
 
-            print(X_data.shape)
+            print("Data without one hot", X_data.shape)
             if categorical:
-                encoder = self.ce['XGB'][i]
+                encoder = self.models['XGB'][i]['encoder']
                 X_data = encoder.transform(X_data)
-                print(X_data.shape)
+                print("Data with one hot", X_data.shape)
 
-            df['xgb' + str(i)] = self.models['XGB'][i].predict(xgb.DMatrix(X_data))
+            df['xgb' + str(i)] = self.models['XGB'][i]['m'].prvedict(xgb.DMatrix(X_data))
 
         for i in range(0, len(self.models['LGB'])):
             X_data = self.fselection['LGB'].transform(X) if 'LGB' in self.fselection else X
-            df['lgb' + str(i)] = self.models['LGB'][i].predict(X_data)
+            df['lgb' + str(i)] = self.models['LGB'][i]['m'].predict(X_data)
 
         if not mean_function is None:
             df['mean'] = df.apply(mean_function, axis=1)
@@ -323,19 +331,20 @@ class GBMFitter:
         # Predict values for every calculated model for Catboost
         for i in range(0, len(self.models['CB'])):
             X_data = self.fselection['CB'].transform(X) if 'CB' in self.fselection else X
-            df['cb_class' + str(i)] = self.rounders['CB'][i].predict(self.models['CB'][i].predict(X_data)).astype(int)
+            rounder = self.models['XGB'][i]['rounders']
+            df['cb_class' + str(i)] = rounder.predict(self.models['CB'][i]['m'].predict(X_data)).astype(int)
 
         # Predict values for every calculated model for XGBoost
         for i in range(0, len(self.models['XGB'])):
             X_data = self.fselection['XGB'].transform(X) if 'XGB' in self.fselection else X
-            df['xgb_class' + str(i)] = self.rounders['XGB'][i].predict(
-                self.models['XGB'][i].predict(xgb.DMatrix(X_data))).astype(int)
+            rounder = self.models['XGB'][i]['rounders']
+            df['xgb_class' + str(i)] = rounder.predict(self.models['XGB'][i]['m'].predict(xgb.DMatrix(X_data))).astype(int)
 
         # Predict values for every calculated model for LightGBM
         for i in range(0, len(self.models['LGB'])):
             X_data = self.fselection['LGB'].transform(X) if 'LGB' in self.fselection else X
-            df['lgb_class' + str(i)] = self.rounders['LGB'][i].predict(self.models['LGB'][i].predict(X_data)).astype(
-                int)
+            rounder = self.models['XGB'][i]['rounders']
+            df['lgb_class' + str(i)] = rounder.predict(self.models['LGB'][i]['m'].predict(X_data)).astype(int)
 
         # Calculate mean if requested
         if not mean_function is None:
