@@ -300,11 +300,9 @@ class GBMFitter:
         for i in range(0, len(self.models['XGB'])):
             X_data = self.fselection['XGB'].transform(X) if 'XGB' in self.fselection else X
 
-            print("Data without one hot", X_data.shape)
             if categorical:
                 encoder = self.models['XGB'][i]['encoder']
                 X_data = encoder.transform(X_data)
-                print("Data with one hot", X_data.shape)
 
             df['xgb' + str(i)] = self.models['XGB'][i]['m'].prvedict(xgb.DMatrix(X_data))
 
