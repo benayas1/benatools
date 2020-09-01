@@ -298,7 +298,7 @@ class GBMFitter:
                 encoder = self.models['XGB'][i]['encoder']
                 X_data = encoder.transform(X_data)
 
-            df['xgb' + str(i)] = self.models['XGB'][i]['m'].prvedict(xgb.DMatrix(X_data))
+            df['xgb' + str(i)] = self.models['XGB'][i]['m'].predict(xgb.DMatrix(X_data))
 
         for i in range(0, len(self.models['LGB'])):
             X_data = self.fselection['LGB'].transform(X) if 'LGB' in self.fselection else X
