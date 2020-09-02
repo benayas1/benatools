@@ -1,5 +1,6 @@
 import os
 import torch
+import numpy as np
 from datetime import datetime
 import time
 import pandas as pd
@@ -119,12 +120,14 @@ class TorchFitter:
             summary_loss, calculated_metric = self.validation(validation_loader, metric, metric_kwargs)
             history['val'] = summary_loss.avg  # validation loss
             history['lr'] = self.optimizer.param_groups[0]['lr']
-            if calculated_metric:
-                history['val_metric'] = calculated_metric
 
             # Print validation results
-            self.log(f'[RESULT]: Val. Epoch: {self.epoch}, summary_loss: {summary_loss.avg:.5f}, '
-                     f'time: {(time.time() - t):.5f}')
+            self.log(f'[RESULT]: Val. Epoch: {self.epoch}, summary_loss: {summary_loss.avg:.5f}, ' +\
+                f'metric {calculated_metric},' if calculated_metric else '' +\
+                f'time: {(time.time() - t):.5f}')
+
+            if calculated_metric:
+                history['val_metric'] = calculated_metric
 
             # Check if result is improved, then save model
             calculated_metric = calculated_metric if calculated_metric else summary_loss.avg
@@ -180,7 +183,8 @@ class TorchFitter:
                 labels = labels.to(self.device)
 
                 if metric:
-                    y_true.extend(labels.cpu().numpy().tolist())
+                    arr = labels.cpu().numpy()
+                    y_true += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
 
                 # just forward propagation
                 output = self.model(images)
@@ -188,7 +192,8 @@ class TorchFitter:
                 summary_loss.update(loss.detach().item(), batch_size)
 
                 if metric:
-                    y_preds.extend(labels.cpu().numpy().tolist())
+                    arr = output.cpu().numpy()
+                    y_preds += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
 
         calculated_metric = metric(y_true, y_preds, **metric_kwargs) if metric else None
 

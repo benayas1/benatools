@@ -12,7 +12,7 @@ URL = 'https://github.com/benayas1/benatools'
 EMAIL = 'benayas1@gmail.com'
 AUTHOR = 'Alberto Benayas'
 REQUIRES_PYTHON = '>=3.6.0'
-VERSION = '0.0.55'
+VERSION = '0.0.56'
 
 # What packages are required for this module to be executed?
 REQUIRED = [
