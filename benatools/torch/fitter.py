@@ -35,7 +35,6 @@ class TorchFitter:
                  model,
                  device,
                  loss,
-                 n_epochs=1,
                  optimizer=None,
                  lr=0.0001,
                  scheduler_class=None,
@@ -51,7 +50,6 @@ class TorchFitter:
             self.loss_function = loss
 
         self.epoch = 0  # current epoch
-        self.n_epochs = n_epochs
         self.verbose = verbose
 
         self.base_dir = f'./{folder}'
@@ -59,7 +57,7 @@ class TorchFitter:
             os.makedirs(self.base_dir)
 
         self.log_path = f'{self.base_dir}/log.txt'
-        self.best_summary_loss = 10**5
+        self.best_metric = 0
 
         self.model = model
         self.device = device
@@ -83,7 +81,7 @@ class TorchFitter:
         self.step_scheduler = step_scheduler  # do scheduler.step after optimizer.step
         self.log(f'Fitter prepared. Device is {self.device}')
 
-    def fit(self, train_loader, validation_loader, early_stopping=0, metric=None, metric_kwargs=None, early_stopping_mode='min'):
+    def fit(self, train_loader, validation_loader, n_epochs=1, early_stopping=0, metric=None, metric_kwargs=None, early_stopping_mode='min'):
         """ Fits a model
 
         Inputs:
@@ -93,10 +91,12 @@ class TorchFitter:
         Outputs:
             returns a pandas DataFrame object with training history
         """
+        self.best_metric = 10 ** 5 if early_stopping_mode == 'min' else -10 ** 5
+
         training_history = []
         es_epochs = 0
-        for e in range(self.n_epochs):
-            history = {'epoch': e}  # training history log
+        for e in range(n_epochs):
+            history = {'epoch': e}  # training history log for this epoch
 
             # Update log
             if self.verbose > 0:
@@ -120,41 +120,30 @@ class TorchFitter:
             history['val'] = summary_loss.avg  # validation loss
             history['lr'] = self.optimizer.param_groups[0]['lr']
             if calculated_metric:
-                history['metric'] = calculated_metric
+                history['val_metric'] = calculated_metric
 
             # Print validation results
             self.log(f'[RESULT]: Val. Epoch: {self.epoch}, summary_loss: {summary_loss.avg:.5f}, '
                      f'time: {(time.time() - t):.5f}')
 
             # Check if result is improved, then save model
-            if metric:
-                if (((early_stopping_mode == 'max') and (calculated_metric > self.best_summary_loss)) or
-                    ((early_stopping_mode == 'min') and (calculated_metric < self.best_summary_loss))):
-
+            calculated_metric = calculated_metric if calculated_metric else summary_loss.avg
+            if (((metric) and
+                    (((early_stopping_mode == 'max') and (calculated_metric > self.best_metric)) or
+                    ((early_stopping_mode == 'min') and (calculated_metric < self.best_metric))))
+                or
+                ((metric is None) and (calculated_metric < self.best_metric))):
                     savepath = f'{self.base_dir}/best-checkpoint-{str(self.epoch).zfill(3)}epoch.bin'
-                    self.log(f'Validation metric improved from {self.best_summary_loss} to '
-                             f'{calculated_metric} and model is saved to {savepath}')
-                    self.best_summary_loss = calculated_metric
+                    self.log(f'Validation metric improved from {self.best_metric} to '
+                                 f'{calculated_metric} and model is saved to {savepath}')
+                    self.best_metric = calculated_metric
                     self.model.eval()
                     self.save(savepath)
                     for path in sorted(glob(f'{self.base_dir}/best-checkpoint-*epoch.bin'))[:-3]:
                         os.remove(path)
                     es_epochs = 0  # reset early stopping count
-                else:
-                    es_epochs += 1
             else:
-                if (summary_loss.avg < self.best_summary_loss):
-                    savepath = f'{self.base_dir}/best-checkpoint-{str(self.epoch).zfill(3)}epoch.bin'
-                    self.log(f'Validation loss improved from {self.best_summary_loss} to '
-                             f'{summary_loss.avg} and model is saved to {savepath}')
-                    self.best_summary_loss = summary_loss.avg
-                    self.model.eval()
-                    self.save(savepath)
-                    for path in sorted(glob(f'{self.base_dir}/best-checkpoint-*epoch.bin'))[:-3]:
-                        os.remove(path)
-                    es_epochs = 0  # reset early stopping count
-                else:
-                    es_epochs += 1
+                es_epochs += 1  # increase epoch count with no improvement, for early stopping check
 
             # Check if Early Stopping condition is met
             if (early_stopping > 0) & (es_epochs > early_stopping):
@@ -258,7 +247,7 @@ class TorchFitter:
                 'model_state_dict': self.model.state_dict(),
                 'optimizer_state_dict': self.optimizer.state_dict(),
                 'scheduler_state_dict': self.scheduler.state_dict(),
-                'best_summary_loss': self.best_summary_loss,
+                'best_summary_loss': self.best_metric,
                 'epoch': self.epoch,
         }, path)
 
@@ -271,7 +260,7 @@ class TorchFitter:
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        self.best_summary_loss = checkpoint['best_summary_loss']
+        self.best_metric = checkpoint['best_summary_loss']
         self.epoch = checkpoint['epoch'] + 1
 
     def log(self, message):
