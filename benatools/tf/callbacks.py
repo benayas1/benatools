@@ -47,7 +47,7 @@ def binary_acc(y_true, y_pred):
 
 class F1Callback(Callback):
     def __init__(self):
-        Callback.__init__()
+        Callback.__init__(self)
         self.f1s = []
 
     def on_epoch_end(self, epoch, logs=None):
