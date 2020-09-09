@@ -82,7 +82,7 @@ class TorchFitter:
         self.step_scheduler = step_scheduler  # do scheduler.step after optimizer.step
         self.log(f'Fitter prepared. Device is {self.device}')
 
-    def fit(self, train_loader, validation_loader, n_epochs=1, early_stopping=0, metric=None, metric_kwargs=None, early_stopping_mode='min'):
+    def fit(self, train_loader, validation_loader, n_epochs=1, early_stopping=0, metric=None, metric_kwargs=None, early_stopping_mode='min', save_checkpoint=True):
         """ Fits a model
 
         Inputs:
@@ -113,7 +113,8 @@ class TorchFitter:
             # Print training result
             self.log(f'[RESULT]: Train. Epoch: {self.epoch}, summary_loss: {summary_loss.avg:.5f}, '
                      f'time: {(time.time() - t):.5f}')
-            self.save(f'{self.base_dir}/last-checkpoint.bin')
+            if save_checkpoint:
+                self.save(f'{self.base_dir}/last-checkpoint.bin')
 
             # Run epoch validation
             t = time.time()
@@ -141,7 +142,8 @@ class TorchFitter:
                                  f'{calculated_metric} and model is saved to {savepath}')
                     self.best_metric = calculated_metric
                     self.model.eval()
-                    self.save(savepath)
+                    if save_checkpoint:
+                        self.save(savepath)
                     for path in sorted(glob(f'{self.base_dir}/best-checkpoint-*epoch.bin'))[:-3]:
                         os.remove(path)
                     es_epochs = 0  # reset early stopping count

@@ -102,11 +102,11 @@ def transform(image, dimension, rotate=180.0, shear=2.0, hzoom=8.0, vzoom=8.0, h
     return tf.reshape(d, [DIM, DIM, 3])
 
 
-def dropout(image, dimension=256, prob=0.75, ct=8, sz=0.2):
+def dropout(image, height=256, width=256, prob=0.75, ct=8, sz=0.2):
     """ Coarse dropout randomly remove squares from training images
 
     Input:
-        image: image of size [dim,dim,3] not a batch of [b,dim,dim,3]
+        image: image of size [height,width,3] not a batch of [b,dim,dim,3]
         dimension: image dimension
         prob: probability to perform dropout
         ct: number of squares to remove
@@ -115,30 +115,32 @@ def dropout(image, dimension=256, prob=0.75, ct=8, sz=0.2):
     Output:
         image with ct squares of side size sz*dimension removed
     """
-    DIM = dimension
 
     # DO DROPOUT WITH PROBABILITY DEFINED ABOVE
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
-    if (P == 0) | (ct == 0) | (sz == 0): return image # no action
+    if (P == 0) | (ct == 0) | (sz == 0):
+        return image # no action
+
+    sq_height = tf.cast(sz * height, tf.int32) * P
+    sq_width = tf.cast(sz * width, tf.int32) * P
 
     # generate random black squares
     for k in range(ct):
         # CHOOSE RANDOM LOCATION
-        x = tf.cast(tf.random.uniform([], 0, DIM), tf.int32)
-        y = tf.cast(tf.random.uniform([], 0, DIM), tf.int32)
+        x = tf.cast(tf.random.uniform([], 0, width), tf.int32)
+        y = tf.cast(tf.random.uniform([], 0, height), tf.int32)
         # COMPUTE SQUARE
-        WIDTH = tf.cast(sz * DIM, tf.int32) * P
-        ya = tf.math.maximum(0, y - WIDTH // 2)
-        yb = tf.math.minimum(DIM, y + WIDTH // 2)
-        xa = tf.math.maximum(0, x - WIDTH // 2)
-        xb = tf.math.minimum(DIM, x + WIDTH // 2)
+        ya = tf.math.maximum(0, y - sq_height // 2)
+        yb = tf.math.minimum(height, y + sq_height // 2)
+        xa = tf.math.maximum(0, x - sq_width // 2)
+        xb = tf.math.minimum(width, x + sq_width // 2)
         # DROPOUT IMAGE
         one = image[ya:yb, 0:xa, :]
         two = tf.zeros([yb - ya, xb - xa, 3])
-        three = image[ya:yb, xb:DIM, :]
+        three = image[ya:yb, xb:width, :]
         middle = tf.concat([one, two, three], axis=1)
-        image = tf.concat([image[0:ya, :, :], middle, image[yb:DIM, :, :]], axis=0)
+        image = tf.concat([image[0:ya, :, :], middle, image[yb:height, :, :]], axis=0)
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR
-    image = tf.reshape(image, [DIM, DIM, 3])
+    image = tf.reshape(image, [height, width, 3])
     return image
