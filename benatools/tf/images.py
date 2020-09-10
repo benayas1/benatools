@@ -55,7 +55,7 @@ def get_mat(rotation=180.0, shear=2.0, height_zoom=8.0, width_zoom=8.0, height_s
 
 
 def transform(image, dimension, rotate=180.0, shear=2.0, hzoom=8.0, vzoom=8.0, hshift=8.0, wshift=8.0):
-    """ transforms an image
+    """ transforms an image by rotating, zooming a shearing
 
     Input:
         image: image of size [dim,dim,3] not a batch of [b,dim,dim,3]
@@ -143,4 +143,63 @@ def dropout(image, height=256, width=256, prob=0.75, ct=8, sz=0.2):
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR
     image = tf.reshape(image, [height, width, 3])
+    return image
+
+
+def spec_augmentation(image, prob=0.66, time_drop_width=0.0625, time_stripes_num=2, freq_drop_width=0.125,
+                      freq_stripes_num=2, height=64, width=501):
+    P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
+    if (P == 0):
+        return image  # no action
+
+    time_drop_size = tf.cast(time_drop_width * width, tf.int32)
+
+    for i in range(time_stripes_num):
+        begin = tf.cast(tf.random.uniform([], 0, width), tf.int32)
+        end = tf.cast(tf.math.minimum(width, begin + time_drop_size), tf.int32)
+        zeros = tf.zeros([height, end - begin, 3])
+        image = tf.concat([image[:, :begin, :], zeros, image[:, end:, :]], axis=1)
+
+    freq_drop_size = tf.cast(freq_drop_width * height, tf.int32)
+
+    for i in range(freq_stripes_num):
+        begin = tf.cast(tf.random.uniform([], 0, height), tf.int32)
+        end = tf.cast(tf.math.minimum(height, begin + freq_drop_size), tf.int32)
+        zeros = tf.zeros([end - begin, width, 3])
+        image = tf.concat([image[:begin, :, :], zeros, image[end:, :, :]], axis=0)
+
+    image = tf.reshape(image, [height, width, 3])
+
+    return image
+
+
+def add_white_noise(image, prob=0.3, std=0.2):
+    P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
+    if (P == 0):
+        return image  # no action
+
+    h, w, c = image.shape
+
+    noise = tf.random.normal(shape=image.shape, mean=tf.reduce_mean(image), stddev=tf.math.reduce_std(image) * std)
+    image = image + noise
+    image = tf.reshape(image, [h, w, c])
+    return image
+
+
+def add_band_noise(image, prob=0.3, std=0.2, band_height=0.125):
+    P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
+    if (P == 0):
+        return image  # no action
+
+    h, w, c = image.shape
+
+    band_height = tf.cast(band_height * h, tf.int32)
+
+    begin = tf.cast(tf.random.uniform([], 0, h), tf.int32)
+    end = tf.cast(tf.math.minimum(h, begin + band_height), tf.int32)
+
+    noise = tf.random.normal(shape=[end - begin, w, 3], mean=tf.reduce_mean(image),
+                             stddev=tf.math.reduce_std(image) * std)
+    image = tf.concat([image[:begin, :, :], image[begin:end, :, :] + noise, image[end:, :, :]], axis=0)
+    image = tf.reshape(image, [h, w, c])
     return image

@@ -83,7 +83,7 @@ def recall(y_true, y_pred):
 
 def precission(y_true, y_pred):
     TP = true_positives(y_true, y_pred)
-    FP = false_negatives(y_true, y_pred)
+    FP = false_positives(y_true, y_pred)
     return TP / (TP+FP)
 
 def F1(y_true, y_pred):
@@ -95,4 +95,4 @@ def F1(y_true, y_pred):
 def F1_2(y_true, y_pred):
     P = precission(y_true, y_pred)
     R = recall(y_true, y_pred)
-    return (2 * P * R) / (P + R)
+    return (2 * P * R) / (P + R + K.epsilon())
