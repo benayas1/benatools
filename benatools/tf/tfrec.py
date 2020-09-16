@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import os
 import pandas as pd
+from tqdm import tqdm
 
 def _chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
@@ -39,7 +40,7 @@ def serialize_example(image, label):
     """
     # Create a dictionary mapping the feature name to the tf.Example-compatible data type.
     feature = {
-      'image': _bytes_feature(image),  # img file
+      'image': _bytes_feature(image.tobytes()),  # img file to bytes
       'y':  _int64_feature(label),  # target
     }
 
@@ -51,16 +52,16 @@ def _write_tfrec_file(path, file_list, labels, serialize_fn, loader_fn=np.load, 
     assert len(file_list) == len(labels)
 
     with tf.io.TFRecordWriter(path + '.tfrec') as writer:
-        for d in zip([file_list, labels]):
-            data = loader_fn(d[0])
+        for d in list(zip(file_list, labels)):
+            data = loader_fn(d[0]).astype(dtype)
             label = d[1]
-            example = serialize_fn(data.tobytes(), label)
+            example = serialize_fn(data, label)
             writer.write(example)
 
 
 def convert(file_list,
             labels,
-            folder='',
+            folder='tfrecords',
             file_prefix='file_',
             max_output_filesize=200,
             dtype=np.int8,
@@ -68,18 +69,26 @@ def convert(file_list,
             zfill=4,
             serialize_fn=serialize_example,
             loader_fn=np.load,
+            verbose=True
             ):
 
+    # Create folder
+    path = os.path.join(folder)
+    if not os.path.exists(path):
+        os.mkdir(path)
+
     # Create a dataframe of files and file sizes
-    file_sizes = [avg_input_filesize] * len(file_list) if avg_input_filesize is None else [ os.path.getsize(f) for f in file_list]
-    df_files = pd.DataFrame({'path':file_list, 'label':labels, 'size':file_sizes})
+    file_sizes = [avg_input_filesize] * len(file_list) if avg_input_filesize is not None else [os.path.getsize(f) for f
+                                                                                               in file_list]
+    df_files = pd.DataFrame({'path': file_list, 'label': labels, 'size': file_sizes})
 
     max_output_filesize = max_output_filesize * 1024 * 1024  # max file size in bytes
 
-    df_files['file_id'] = df_files['size'].cumsum() % max_output_filesize
+    df_files['file_id'] = (df_files['size'].cumsum() // max_output_filesize).astype(str)
     df_files['file_id'] = df_files['file_id'].str.zfill(zfill)
 
     path_prefix = folder + '/' + file_prefix
-    for file_id, g in df_files.groupby('file_id'):
-        _write_tfrec_file(path_prefix+file_id, df_files['path'], df_files['label'], serialize_fn=serialize_fn, loader_fn=loader_fn, dtype=dtype)
+    for file_id, g in tqdm(df_files.groupby('file_id'), disable=not verbose):
+        _write_tfrec_file(path_prefix + file_id, g['path'], g['label'], serialize_fn=serialize_fn, loader_fn=loader_fn,
+                          dtype=dtype)
 

@@ -22,7 +22,7 @@ def get_device_strategy(device, verbose=True):
     v = tf.__version__
 
     if device == "TPU":
-        _log("connecting to TPU...")
+        _log("connecting to TPU...", verbose)
         try:
             tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
             _log('Running on TPU ' + tpu.master(), verbose)
