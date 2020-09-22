@@ -36,10 +36,8 @@ class TorchFitter:
                  model,
                  device,
                  loss,
-                 optimizer=None,
-                 lr=0.0001,
-                 scheduler_class=None,
-                 scheduler_params=None,
+                 optimizer,
+                 scheduler=None,
                  folder='models',
                  verbose=0,
                  validation_scheduler=True,
@@ -71,13 +69,10 @@ class TorchFitter:
         ]
 
         # Optimizer object
-        if not optimizer:
-            self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
-        else:
-            self.optimizer = optimizer
+        self.optimizer = optimizer
 
-        self.scheduler = scheduler_class(self.optimizer, **scheduler_params)
-
+        # Scheduler Object
+        self.scheduler = scheduler
         self.validation_scheduler = validation_scheduler  # do scheduler.step after validation stage loss
         self.step_scheduler = step_scheduler  # do scheduler.step after optimizer.step
         self.log(f'Fitter prepared. Device is {self.device}')
@@ -88,7 +83,7 @@ class TorchFitter:
         Inputs:
             train_loader: Training data
             validation_loader: Validation Data
-
+            n_epochs: maximum number of epochs to train
         Outputs:
             returns a pandas DataFrame object with training history
         """
