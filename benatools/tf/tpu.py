@@ -20,6 +20,7 @@ def get_device_strategy(device, verbose=True):
     """
     device = device.upper()
     v = tf.__version__
+    tpu = None
 
     if device == "TPU":
         _log("connecting to TPU...", verbose)

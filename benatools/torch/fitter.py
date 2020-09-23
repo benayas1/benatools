@@ -98,49 +98,49 @@ class TorchFitter:
             if self.verbose > 0:
                 lr = self.optimizer.param_groups[0]['lr']
                 timestamp = datetime.utcnow().isoformat()
-                self.log(f'\n{timestamp}\nLR: {lr}')
+                self.log(f'\n{timestamp}\nEPOCH {str(self.epoch)}/{str(n_epochs)} - LR: {lr}')
 
             # Run one training epoch
             t = time.time()
-            summary_loss = self.train_one_epoch(train_loader)
-            history['train'] = summary_loss.avg  # training loss
+            train_summary_loss = self.train_one_epoch(train_loader)
+            history['train'] = train_summary_loss.avg  # training loss
 
             # Print training result
-            self.log(f'[RESULT]: Train. Epoch: {self.epoch}, summary_loss: {summary_loss.avg:.5f}, '
-                     f'time: {(time.time() - t):.5f}')
+            #self.log(f'[RESULT]: Train. summary_loss: {train_summary_loss.avg:.5f}, '
+            #         f'time: {(time.time() - t):.2f}')
             if save_checkpoint:
-                self.save(f'{self.base_dir}/last-checkpoint.bin')
+                self.save(f'{self.base_dir}/last-checkpoint.bin', False)
 
             # Run epoch validation
             t = time.time()
-            summary_loss, calculated_metric = self.validation(validation_loader, metric, metric_kwargs)
-            history['val'] = summary_loss.avg  # validation loss
+            val_summary_loss, calculated_metric = self.validation(validation_loader, metric, metric_kwargs)
+            history['val'] = val_summary_loss.avg  # validation loss
             history['lr'] = self.optimizer.param_groups[0]['lr']
 
             # Print validation results
-            self.log(f'[RESULT]: Val. Epoch: {self.epoch}, summary_loss: {summary_loss.avg:.5f}, ' +\
-                f'metric {calculated_metric},' if calculated_metric else '' +\
-                f'time: {(time.time() - t):.5f}')
+            #self.log(f'[RESULT]: Valid. summary_loss: {val_summary_loss.avg:.5f}, ' +\
+            #         f'metric {calculated_metric},' if calculated_metric else '' +\
+            #         f'time: {(time.time() - t):.2f}')
+
+            metric_log = f'metric {calculated_metric},' if calculated_metric else ''
+            self.log(f'[RESULT] {(time.time() - t):.2f}s - train loss: {train_summary_loss.avg:.5f} - val loss: {val_summary_loss.avg:.5f} ' + metric_log)
 
             if calculated_metric:
                 history['val_metric'] = calculated_metric
 
             # Check if result is improved, then save model
-            calculated_metric = calculated_metric if calculated_metric else summary_loss.avg
+            calculated_metric = calculated_metric if calculated_metric else val_summary_loss.avg
             if (((metric) and
                     (((early_stopping_mode == 'max') and (calculated_metric > self.best_metric)) or
                     ((early_stopping_mode == 'min') and (calculated_metric < self.best_metric))))
                 or
                 ((metric is None) and (calculated_metric < self.best_metric))):
-                    savepath = f'{self.base_dir}/best-checkpoint-{str(self.epoch).zfill(3)}epoch.bin'
-                    self.log(f'Validation metric improved from {self.best_metric} to '
-                                 f'{calculated_metric} and model is saved to {savepath}')
+                    self.log(f'Validation metric improved from {self.best_metric} to {calculated_metric}')
                     self.best_metric = calculated_metric
                     self.model.eval()
                     if save_checkpoint:
+                        savepath = f'{self.base_dir}/best-checkpoint.bin'
                         self.save(savepath)
-                    for path in sorted(glob(f'{self.base_dir}/best-checkpoint-*epoch.bin'))[:-3]:
-                        os.remove(path)
                     es_epochs = 0  # reset early stopping count
             else:
                 es_epochs += 1  # increase epoch count with no improvement, for early stopping check
@@ -152,7 +152,7 @@ class TorchFitter:
                 break
 
             if self.validation_scheduler:
-                self.scheduler.step(metrics=summary_loss.avg)
+                self.scheduler.step(metrics=val_summary_loss.avg)
 
             training_history.append(history)
             self.epoch += 1
@@ -239,11 +239,13 @@ class TorchFitter:
 
         return summary_loss
 
-    def save(self, path):
+    def save(self, path, verbose=True):
         """ Save model and other metadata
         input:
             path: path of the file to be saved
         """
+        if verbose:
+            self.log(f'Model is saved to {path}')
         self.model.eval()
         torch.save({
                 'model_state_dict': self.model.state_dict(),
