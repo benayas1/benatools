@@ -107,8 +107,8 @@ def scaled_dot_product_attention(q, k, v, mask):
 class MultiHeadAttention(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads):
         super(MultiHeadAttention, self).__init__()
-        self.num_heads = num_heads
         self.d_model = d_model
+        self.num_heads = num_heads
 
         # d_model must be divisible by num_heads
         assert d_model % self.num_heads == 0
@@ -128,12 +128,14 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         """Split the last dimension into (num_heads, depth).
         Transpose the result such that the shape is (batch_size, num_heads, seq_len, depth)
         """
+
         x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def call(self, v, k, q, mask):
+    def call(self, v, k, q, mask=None):
         # calculate batch size
         batch_size = tf.shape(q)[0]
+        seq_len = tf.shape(q)[1]
 
         # calculate q, v and k
         q = self.wq(q)  # (batch_size, seq_len, d_model)
@@ -156,7 +158,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])  # (batch_size, seq_len_q, num_heads, depth)
 
         # Now we have to concat back all the different heads, thus removing one dimension
-        concat_attention = tf.reshape(scaled_attention, (batch_size, -1, self.d_model))  # (batch_size, seq_len_q, d_model)
+        concat_attention = tf.reshape(scaled_attention, (batch_size, seq_len, self.d_model))  # (batch_size, seq_len_q, d_model)
 
         # Finally apply another dense layer to the concatenated output
         output = self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
@@ -169,8 +171,6 @@ class MultiHeadAttention(tf.keras.layers.Layer):
             'd_model': self.d_model,
         }
         return config
-
-
 
 
 

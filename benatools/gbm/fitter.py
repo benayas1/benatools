@@ -8,6 +8,7 @@ import time
 import gc
 import sklearn.metrics as mt
 import category_encoders as ce
+from functools import partial
 
 
 class _Folds:
