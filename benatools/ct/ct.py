@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 from plotly.offline import download_plotlyjs, init_notebook_mode, plot, iplot
 import plotly.figure_factory as ff
 from sklearn.cluster import KMeans
+import vtk
+from vtk.util import numpy_support
 from plotly.graph_objs import *
 
 
@@ -52,14 +54,16 @@ def get_pixels_hu(scans):
     image[image == -2000] = 0
 
     # Convert to Hounsfield units (HU)
-    intercept = scans[0].RescaleIntercept
-    slope = scans[0].RescaleSlope
+    for n in range(len(scans)):
 
-    if slope != 1:
-        image = slope * image.astype(np.float64)
-        image = image.astype(np.int16)
+        intercept = scans[n].RescaleIntercept
+        slope = scans[n].RescaleSlope
 
-    image += np.int16(intercept)
+        if slope != 1:
+            image[n] = slope * image[n].astype(np.float64)
+            image[n] = image[n].astype(np.int16)
+
+        image[n] += np.int16(intercept)
 
     return np.array(image, dtype=np.int16)
 
@@ -233,3 +237,26 @@ def make_lungmask(img, display=False, mean=None, std=None):
 
         plt.show()
     return mask * img
+
+
+########## VTK Library ########################
+def get_img_vtk(path):
+    reader = vtk.vtkDICOMImageReader()
+    reader.SetFileName(path)
+    reader.Update()
+    _extent = reader.GetDataExtent()
+    ConstPixelDims = [_extent[1] - _extent[0] + 1, _extent[3] - _extent[2] + 1, _extent[5] - _extent[4] + 1]
+
+    ConstPixelSpacing = reader.GetPixelSpacing()
+    arrayData = reader.GetOutput().GetPointData().GetArray(0)
+    ArrayDicom = numpy_support.vtk_to_numpy(arrayData)
+    ArrayDicom = ArrayDicom.reshape((reader.GetHeight(), reader.GetWidth()), order='F')
+    return ArrayDicom
+
+
+def load_vtk(paths):
+    paths.sort(key=lambda x: int(x.split('/')[-1].split('.')[0]), reverse=True)
+    slices = [get_img_vtk(path) for path in paths]
+    image = np.stack([s for s in slices]).astype(np.int16)
+
+    return image
