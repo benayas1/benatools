@@ -251,12 +251,23 @@ def get_img_vtk(path):
     arrayData = reader.GetOutput().GetPointData().GetArray(0)
     ArrayDicom = numpy_support.vtk_to_numpy(arrayData)
     ArrayDicom = ArrayDicom.reshape((reader.GetHeight(), reader.GetWidth()), order='F')
-    return ArrayDicom
+    return ArrayDicom, reader
 
 
-def load_vtk(paths):
+def load_vtk(paths, resample_scan=True, return_spacing=False):
     paths.sort(key=lambda x: int(x.split('/')[-1].split('.')[0]), reverse=True)
     slices = [get_img_vtk(path) for path in paths]
-    image = np.stack([s for s in slices]).astype(np.int16)
+    image = np.stack([s[0] for s in slices]).astype(np.int16)
+
+    pixel_spacing = np.array([s[1].GetPixelSpacing() for s in slices])
+    pixel_spacing = np.median(pixel_spacing, axis=0)
+    thickness = pixel_spacing[2]
+    pixel_spacing = pixel_spacing[0]
+
+    if resample_scan:
+        image = resample(image, scan_spacing=np.array([thickness, pixel_spacing, pixel_spacing]))
+
+    if return_spacing:
+        return image, np.array([thickness, pixel_spacing, pixel_spacing])
 
     return image
