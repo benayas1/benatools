@@ -13,8 +13,35 @@ import vtk
 from vtk.util import numpy_support
 from plotly.graph_objs import *
 
+def load_scan(paths, library='vtk', resample_scan=True):
+    if library == 'vtk':
+        return load_vtk(paths, resample_scan=resample_scan)
+    if library == 'pydicom':
+        return load_pydicom(paths, resample_scan=resample_scan)
+    raise (f'Library {library} not supported')
 
-def load_scan(paths, return_spacing=False):
+def load_pydicom(paths, resample_scan=True, return_spacing=False):
+    """
+    Function to read all DICOM files belonging to a scan. The functions sorts the slices in order.
+        Inputs:
+            paths: list of paths to read. Normally you should use glob to get the files
+            return_thickness: return slice thickness
+        Outputs:
+            slices: List of slices sorted by Instance Number
+    """
+    slices, spacing = load_slices(paths, return_spacing=True)
+    hu_scan = get_pixels_hu(slices)
+
+    if resample_scan:
+        hu_scan = resample(hu_scan, scan_spacing=spacing)
+
+    if return_spacing:
+        return hu_scan, spacing
+
+    return hu_scan
+
+
+def load_slices(paths, return_spacing=False):
     """
     Function to read all DICOM files belonging to a scan. The functions sorts the slices in order.
         Inputs:
@@ -24,16 +51,19 @@ def load_scan(paths, return_spacing=False):
             slices: List of slices sorted by Instance Number
     """
     slices = [pydicom.read_file(path) for path in paths]
-    slices.sort(key = lambda x: int(x.InstanceNumber), reverse = True)
+    slices.sort(key=lambda x: int(x.InstanceNumber), reverse=True)
     try:
-        slice_thickness = np.abs(slices[0].ImagePositionPatient[2] - slices[1].ImagePositionPatient[2])
+        slice_thickness = np.median([np.abs(slices[i].ImagePositionPatient[2] - slices[i + 1].ImagePositionPatient[2]) for i in range(len(slices) - 1)])
     except:
-        slice_thickness = np.abs(slices[0].SliceLocation - slices[1].SliceLocation)
+        slice_thickness = np.median([np.abs(slices[0].SliceLocation - slices[1].SliceLocation) for i in range(len(slices) - 1)])
 
     for s in slices:
         s.SliceThickness = slice_thickness
 
-    return slices, np.array([slice_thickness, slices[0].PixelSpacing, slices[0].PixelSpacing]) if return_spacing else slices
+    if return_spacing:
+        return slices, np.array([slice_thickness] + list(slices[0].PixelSpacing))
+
+    return slices
 
 
 def get_pixels_hu(scans):
