@@ -1,6 +1,10 @@
 import numpy as np
 import pandas as pd
 import gc
+from functools import partial
+from scipy.optimize import fmin
+from abc import ABC, abstractmethod
+import sklearn as sk
 
 
 class MultiStratifiedKFold():
@@ -119,3 +123,27 @@ def to_df_all(files):
     del dfs
     gc.collect()
     return df_final
+
+
+class BaseOptimizeBlend(ABC):
+    def __init__(self):
+        self._coef = 0
+
+    @abstractmethod
+    def metric(self, coef, X, y):
+        x_coef = X * coef
+        predictions = np.sum(x_coef, axis=1)
+        score = sk.metrics.mean_squared_error(y, predictions)
+        return score
+
+    def fit(self, X, y):
+        partial_loss = partial(self.metric, X=X, y=y)
+        init_coef = np.random.dirichlet(np.ones(X.shape[1]))
+        self._coef = fmin(partial_loss, init_coef, disp=True)
+
+    def predict(self, X):
+        x_coef = X * self.coef_
+        predictions = np.sum(x_coef, axis=1)
+        return predictions
+
+
