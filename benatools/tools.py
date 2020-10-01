@@ -142,7 +142,7 @@ class BaseOptimizeBlend(ABC):
         self._coef = fmin(partial_loss, init_coef, disp=True)
 
     def predict(self, X):
-        x_coef = X * self.coef_
+        x_coef = X * self._coef
         predictions = np.sum(x_coef, axis=1)
         return predictions
 
