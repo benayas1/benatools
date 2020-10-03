@@ -9,9 +9,7 @@ import sklearn as sk
 
 class MultiStratifiedKFold():
     """ Multi Stratified K-Fold cross validator
-    
         Indices split happens at creation time
-    
     """
     def __init__(self, n_splits, df, features, seed=0):
         self.folds = n_splits
@@ -90,10 +88,15 @@ class MultiStratifiedKFold():
             yield self.get_indices(i)
 
     def as_list(self):
-        """ Returns a list of indices"""
+        """
+        Returns a list of indices
+        """
         return [self.get_indices(i) for i in range(self.folds)]
 
     def get_n_splits(self):
+        """"
+        Returns the number of splits
+        """
         return self.folds
 
 
@@ -126,22 +129,50 @@ def to_df_all(files):
 
 
 class BaseOptimizeBlend(ABC):
+    """"
+    Base class for Optimizer used in blending results of models"""
     def __init__(self):
         self._coef = 0
 
     @abstractmethod
     def metric(self, coef, X, y):
+        """"
+        This is an abstract method that shall return the metric to be minimized.
+        If what is needed is to maximize the metric, then return -1 * metric.
+
+        Inputs:
+            coef: is an array of coefficients to be optimized. Shape is (n_models, )
+            X: predicted values. Shape is (n_samples, n_models)
+            y: true values. Shape is (n_samples, )
+        Outputs:
+            The score metric of all estimators with coefficients applied
+        """
         x_coef = X * coef
         predictions = np.sum(x_coef, axis=1)
         score = sk.metrics.mean_squared_error(y, predictions)
         return score
 
     def fit(self, X, y):
+        """
+        Fit the results X to the true values y
+
+        Inputs:
+            X: predicted values. Shape is (n_samples, n_models)
+            y: true values. Shape is (n_samples, )
+        """
         partial_loss = partial(self.metric, X=X, y=y)
         init_coef = np.random.dirichlet(np.ones(X.shape[1]))
         self._coef = fmin(partial_loss, init_coef, disp=True)
 
     def predict(self, X):
+        """
+        Once the Optimizer is fitted, blend the predictions from n_models using the calculated coefficients
+
+        Inputs:
+            X: predicted values. Shape is (n_samples, n_models)
+        Outputs:
+            An array with shape (n_samples, ) with the X values blended applying coefficients
+        """
         x_coef = X * self._coef
         predictions = np.sum(x_coef, axis=1)
         return predictions

@@ -34,13 +34,13 @@ def _int64_feature_list(value):
     v = tf.train.Int64List(value=value)
     return tf.train.Feature(int64_list=v)
 
-def serialize_example(image, label):
+def serialize_example(data, label):
     """
     Creates a tf.Example message ready to be written to a file.
     """
     # Create a dictionary mapping the feature name to the tf.Example-compatible data type.
     feature = {
-      'image': _bytes_feature(image.tobytes()),  # img file to bytes
+      'image': _bytes_feature(data.tobytes()),  # img file to bytes
       'y':  _int64_feature(label),  # target
     }
 
@@ -49,6 +49,17 @@ def serialize_example(image, label):
     return example_proto.SerializeToString()
 
 def _write_tfrec_file(path, file_list, labels, serialize_fn, loader_fn=np.load, dtype=np.int8):
+    """
+    Converts a list of files to TfRecords, and then writes them into a tfrec file
+
+    Inputs:
+        path: The destination path for the tfrec file
+        file_list: A list of paths to be encoded into the tfrec file
+        labels: A list of labels
+        serialize_fn: Function to convert a single file into a tf.Example. Signature is (data, label)
+        loader_fn: Function to load a file. Could be np.load if format is npy
+        dtype: Data type to convert loaded data before serializing. For images, np.int8
+    """
     assert len(file_list) == len(labels)
 
     with tf.io.TFRecordWriter(path + '.tfrec') as writer:
@@ -71,6 +82,22 @@ def convert(file_list,
             loader_fn=np.load,
             verbose=True
             ):
+    """
+    Converts a list of files into a set of tfrec files
+
+    Inputs:
+        file_list: A list of paths to be encoded into the tfrec file
+        labels: A list of labels
+        folder: Folder where all the tfrec files will be stored
+        file_prefix: prefix to place in
+        max_output_filesize: Maximum file size in MB
+        dtype:
+        avg_input_filesize:
+        zfill:
+        serialize_fn: Function to convert a single file into a tf.Example. Signature is (data, label)
+        loader_fn: Function to load a file. Could be np.load if format is npy
+        dtype: Data type to convert loaded data before serializing. For images, np.int8
+    """
 
     # Create folder
     path = os.path.join(folder)
@@ -92,3 +119,76 @@ def convert(file_list,
         _write_tfrec_file(path_prefix + file_id, g['path'], g['label'], serialize_fn=serialize_fn, loader_fn=loader_fn,
                           dtype=dtype)
 
+
+def convert_tfrecords(file_list,
+                      labels,
+                      folder='tfrecords',
+                      file_prefix='file_',
+                      max_output_filesize=200,
+                      zfill=4,
+                      dtype=np.int8,
+                      serialize_fn=serialize_example,
+                      loader_fn=np.load,
+                      verbose=True
+                      ):
+    """
+    Converts a list of files into a set of tfrec files
+
+    Inputs:
+        file_list: A list of paths to be encoded into the tfrec file
+        labels: A list of labels
+        folder: Folder where all the tfrec files will be stored
+        file_prefix: prefix to place in
+        max_output_filesize: Maximum file size in MB
+        zfill: zero fill for the file name
+        dtype: data type to convert to
+        serialize_fn: Function to convert a single file into a tf.Example. Signature is (data, label)
+        loader_fn: Function to load a file. Could be np.load if format is npy
+        verbose
+    """
+
+    assert len(file_list) == len(labels)
+
+    # Create folder
+    path = os.path.join(folder)
+    if not os.path.exists(path):
+        os.mkdir(path)
+
+    n_bytes = np.inf
+    n_files = 0
+    file_index = -1
+    path = folder + '/' + file_prefix
+    tmp = path + 'tmp.tfrec'
+
+    for f, label in list(zip(file_list, labels)):
+        data = loader_fn(f).astype(dtype).dtype(dtype)
+        example = serialize_fn(data, label)
+
+        n_bytes += data.nbytes
+
+        if n_bytes > max_output_filesize * 1024 * 1024:
+            # rename previous file
+            if os.path.exists(tmp):
+                filename = path + str(file_index).zfill(zfill) + '_' + str(n_files)
+                os.rename(tmp, filename)
+                if verbose:
+                    print(f'File saved to {filename}')
+
+            # Initialize next file
+            n_files = 0
+            n_bytes = data.nbytes
+            file_index += 1
+            with tf.io.TFRecordWriter(tmp) as writer:
+                writer.write(example)
+        else:
+            with tf.io.TFRecordWriter(tmp, 'a') as writer:
+                writer.write(example)
+
+        n_files += 1
+
+    # close last file
+    if os.path.exists(tmp):
+        filename = path + str(file_index).zfill(zfill) + '_' + str(n_files)
+        os.rename(tmp, filename)
+        if verbose:
+            print(f'File saved to {filename}')
