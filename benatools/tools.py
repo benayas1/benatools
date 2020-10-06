@@ -126,8 +126,10 @@ def to_df_all(files):
 
 
 class BaseOptimizeBlend(ABC):
-    def __init__(self):
+    def __init__(self, maxiter=1000, maxfun=1000):
         self._coef = 0
+        self._maxiter = maxiter
+        self._maxfun = maxfun
 
     @abstractmethod
     def metric(self, coef, X, y):
@@ -139,11 +141,14 @@ class BaseOptimizeBlend(ABC):
     def fit(self, X, y):
         partial_loss = partial(self.metric, X=X, y=y)
         init_coef = np.random.dirichlet(np.ones(X.shape[1]))
-        self._coef = fmin(partial_loss, init_coef, disp=True)
+        self._coef = fmin(partial_loss, init_coef, disp=True, maxiter=self._maxiter, maxfun= self._maxfun)
 
     def predict(self, X):
         x_coef = X * self._coef
         predictions = np.sum(x_coef, axis=1)
         return predictions
+
+    def get_coef(self):
+        return self._coef
 
 
