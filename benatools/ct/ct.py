@@ -14,6 +14,9 @@ from vtk.util import numpy_support
 from plotly.graph_objs import *
 
 def load_scan(paths, library='vtk', resample_scan=True):
+    """
+    Load
+    """
     if library == 'vtk':
         return load_vtk(paths, resample_scan=resample_scan)
     if library == 'pydicom':
