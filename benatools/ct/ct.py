@@ -290,11 +290,14 @@ def get_img_vtk(path):
     return ArrayDicom, reader
 
 
-def load_vtk(paths, resample_scan=True, return_spacing=False):
+def load_vtk(paths, resample_scan=True, return_spacing=False, sort_paths=False):
     if os.path.isdir(paths):
+        slices = get_img_vtk(paths)
+    else:
+        if sort_paths:
+            paths.sort(key=lambda x: int(x.split('/')[-1].split('.')[0]), reverse=True)
+        slices = [get_img_vtk(path) for path in paths]
 
-    paths.sort(key=lambda x: int(x.split('/')[-1].split('.')[0]), reverse=True)
-    slices = [get_img_vtk(path) for path in paths]
     image = np.stack([s[0] for s in slices]).astype(np.int16)
 
     pixel_spacing = np.array([s[1].GetPixelSpacing() for s in slices])
