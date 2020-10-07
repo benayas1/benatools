@@ -282,10 +282,19 @@ def load_vtk_dir(path):
     _extent = reader.GetDataExtent()
     ConstPixelDims = [_extent[1] - _extent[0] + 1, _extent[3] - _extent[2] + 1, _extent[5] - _extent[4] + 1]
 
-    arrayData = reader.GetOutput().GetPointData().GetArray(0)
-    ArrayDicom = numpy_support.vtk_to_numpy(arrayData)
-    ArrayDicom = ArrayDicom.reshape((reader.GetHeight(), reader.GetWidth()), order='F')
-    return ArrayDicom, reader
+    # Load spacing values
+    ConstPixelSpacing = reader.GetPixelSpacing()
+
+    # Get the 'vtkImageData' object from the reader and get the 'vtkPointData' object from the 'vtkImageData' object
+    pointData = reader.GetOutput().GetPointData()
+    # Ensure that only one array exists within the 'vtkPointData' object
+    assert (pointData.GetNumberOfArrays() == 1)
+    # Get the `vtkArray` (or whatever derived type) which is needed for the `numpy_support.vtk_to_numpy` function
+    arrayData = pointData.GetArray(0)
+    # Convert the `vtkArray` to a NumPy array and reshape the NumPy array to 3D using 'ConstPixelDims' as a 'shape'
+    arr = numpy_support.vtk_to_numpy(arrayData).reshape(ConstPixelDims, order='F')
+
+    return arr, reader
 
 def load_vtk_file(path):
     reader = vtk.vtkDICOMImageReader()
