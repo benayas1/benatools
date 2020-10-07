@@ -11,6 +11,7 @@ import plotly.figure_factory as ff
 from sklearn.cluster import KMeans
 import vtk
 from vtk.util import numpy_support
+import os
 from plotly.graph_objs import *
 
 def load_scan(paths, library='vtk', resample_scan=True):
@@ -275,12 +276,14 @@ def make_lungmask(img, display=False, mean=None, std=None):
 ########## VTK Library ########################
 def get_img_vtk(path):
     reader = vtk.vtkDICOMImageReader()
-    reader.SetFileName(path)
+    if os.path.isdir(path):
+        reader.SetDirectoryName(path)
+    else:
+        reader.SetFileName(path)
     reader.Update()
     _extent = reader.GetDataExtent()
     ConstPixelDims = [_extent[1] - _extent[0] + 1, _extent[3] - _extent[2] + 1, _extent[5] - _extent[4] + 1]
 
-    ConstPixelSpacing = reader.GetPixelSpacing()
     arrayData = reader.GetOutput().GetPointData().GetArray(0)
     ArrayDicom = numpy_support.vtk_to_numpy(arrayData)
     ArrayDicom = ArrayDicom.reshape((reader.GetHeight(), reader.GetWidth()), order='F')
@@ -288,6 +291,8 @@ def get_img_vtk(path):
 
 
 def load_vtk(paths, resample_scan=True, return_spacing=False):
+    if os.path.isdir(paths):
+
     paths.sort(key=lambda x: int(x.split('/')[-1].split('.')[0]), reverse=True)
     slices = [get_img_vtk(path) for path in paths]
     image = np.stack([s[0] for s in slices]).astype(np.int16)
