@@ -150,9 +150,9 @@ def plot_3d(image, threshold=700, color="navy"):
     mesh.set_facecolor(color)
     ax.add_collection3d(mesh)
 
-    ax.set_xlim(0, p.shape[0])
-    ax.set_ylim(0, p.shape[1])
-    ax.set_zlim(0, p.shape[2])
+    ax.set_xlim(0, image.shape[0])
+    ax.set_ylim(0, image.shape[1])
+    ax.set_zlim(0, image.shape[2])
 
     plt.show()
 
