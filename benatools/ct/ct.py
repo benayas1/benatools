@@ -138,9 +138,9 @@ def resize_scan(scan, new_shape=(128,128,128)):
 def plot_3d(image, threshold=700, color="navy"):
     # Position the scan upright,
     # so the head of the patient would be at the top facing the camera
-    p = image.transpose(2, 1, 0)
+    #p = image.transpose(2, 1, 0)
 
-    verts, faces, _, _ = measure.marching_cubes_lewiner(p, threshold)
+    verts, faces, _, _ = measure.marching_cubes_lewiner(image, threshold)
 
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111, projection='3d')
@@ -274,7 +274,20 @@ def make_lungmask(img, display=False, mean=None, std=None):
 
 
 ########## VTK Library ########################
-def get_img_vtk(path):
+
+def load_vtk_dir(path):
+    reader = vtk.vtkDICOMImageReader()
+    reader.SetDirectoryName(path)
+    reader.Update()
+    _extent = reader.GetDataExtent()
+    ConstPixelDims = [_extent[1] - _extent[0] + 1, _extent[3] - _extent[2] + 1, _extent[5] - _extent[4] + 1]
+
+    arrayData = reader.GetOutput().GetPointData().GetArray(0)
+    ArrayDicom = numpy_support.vtk_to_numpy(arrayData)
+    ArrayDicom = ArrayDicom.reshape((reader.GetHeight(), reader.GetWidth()), order='F')
+    return ArrayDicom, reader
+
+def load_vtk_file(path):
     reader = vtk.vtkDICOMImageReader()
     if os.path.isdir(path):
         reader.SetDirectoryName(path)
@@ -291,24 +304,27 @@ def get_img_vtk(path):
 
 
 def load_vtk(paths, resample_scan=True, return_spacing=False, sort_paths=False):
-    if os.path.isdir(paths):
-        slices = get_img_vtk(paths)
-    else:
+    if isinstance(paths, list):
         if sort_paths:
             paths.sort(key=lambda x: int(x.split('/')[-1].split('.')[0]), reverse=True)
-        slices = [get_img_vtk(path) for path in paths]
+        slices = [load_vtk_file(path) for path in paths]
+        scan = np.stack([s[0] for s in slices]).astype(np.int16)
+        pixel_spacing = np.array([s[1].GetPixelSpacing() for s in slices])
+        pixel_spacing = np.median(pixel_spacing, axis=0)
+    else:
+        if os.path.isdir(paths):
+            scan, reader = load_vtk_dir(paths)
+            pixel_spacing = reader.GetPixelSpacing()
+        else:
+            raise("No valid paths format")
 
-    image = np.stack([s[0] for s in slices]).astype(np.int16)
-
-    pixel_spacing = np.array([s[1].GetPixelSpacing() for s in slices])
-    pixel_spacing = np.median(pixel_spacing, axis=0)
     thickness = pixel_spacing[2]
     pixel_spacing = pixel_spacing[0]
 
     if resample_scan:
-        image = resample(image, scan_spacing=np.array([thickness, pixel_spacing, pixel_spacing]))
+        scan = resample(scan, scan_spacing=np.array([thickness, pixel_spacing, pixel_spacing]))
 
     if return_spacing:
-        return image, np.array([thickness, pixel_spacing, pixel_spacing])
+        return scan, np.array([thickness, pixel_spacing, pixel_spacing])
 
-    return image
+    return scan
