@@ -39,7 +39,7 @@ def get_device_strategy(device, verbose=True):
                 strategy = tf.distribute.TPUStrategy(tpu) if v >= '2.3.0' else tf.distribute.experimental.TPUStrategy(
                     tpu)
                 _log("TPU initialized", verbose)
-            except _:
+            except:
                 _log("failed to initialize TPU", verbose)
         else:
             device = "GPU"
