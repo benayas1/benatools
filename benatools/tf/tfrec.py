@@ -10,26 +10,26 @@ def _chunks(lst, n):
         yield lst[i:i + n]
 
 
-def _bytes_feature(value):
+def bytes_feature(value):
     """Returns a bytes_list from a string / byte."""
     if isinstance(value, type(tf.constant(0))):
         value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-def _float_feature(value):
+def float_feature(value):
     """Returns a float_list from a float / double."""
     return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
 
-def _float_feature_list(value):
+def float_feature_list(value):
     """Returns an int64_list from a bool / enum / int / uint."""
     v = tf.train.FloatList(value=value)
     return tf.train.Feature(float_list=v)
 
-def _int64_feature(value):
+def int64_feature(value):
     """Returns a single element int64_list from a bool / enum / int / uint."""
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
-def _int64_feature_list(value):
+def int64_feature_list(value):
     """Returns an int64_list from a bool / enum / int / uint."""
     v = tf.train.Int64List(value=value)
     return tf.train.Feature(int64_list=v)
@@ -40,8 +40,8 @@ def serialize_example(data, label):
     """
     # Create a dictionary mapping the feature name to the tf.Example-compatible data type.
     feature = {
-      'image': _bytes_feature(data.tobytes()),  # img file to bytes
-      'y':  _int64_feature(label),  # target
+      'image': bytes_feature(data.tobytes()),  # img file to bytes
+      'y':  int64_feature(label),  # target
     }
 
     # Create a Features message using tf.train.Example.
@@ -98,6 +98,7 @@ def convert(file_list,
         loader_fn: Function to load a file. Could be np.load if format is npy
         dtype: Data type to convert loaded data before serializing. For images, np.int8
     """
+    assert len(file_list) == len(labels)
 
     # Create folder
     path = os.path.join(folder)
@@ -107,7 +108,7 @@ def convert(file_list,
     # Create a dataframe of files and file sizes
     file_sizes = [avg_input_filesize] * len(file_list) if avg_input_filesize is not None else [os.path.getsize(f) for f
                                                                                                in file_list]
-    df_files = pd.DataFrame({'path': file_list, 'label': labels, 'size': file_sizes})
+    df_files = pd.DataFrame({'path': file_list, 'label_idx': [i for i in range(len(labels))], 'size': file_sizes})
 
     max_output_filesize = max_output_filesize * 1024 * 1024  # max file size in bytes
 
@@ -116,7 +117,7 @@ def convert(file_list,
 
     path_prefix = folder + '/' + file_prefix
     for file_id, g in tqdm(df_files.groupby('file_id'), disable=not verbose):
-        _write_tfrec_file(path_prefix + file_id, g['path'], g['label'], serialize_fn=serialize_fn, loader_fn=loader_fn,
+        _write_tfrec_file(path_prefix + file_id, g['path'], labels[g['label_idx'].values], serialize_fn=serialize_fn, loader_fn=loader_fn,
                           dtype=dtype)
 
 
@@ -161,7 +162,7 @@ def convert_tfrecords(file_list,
     tmp = path + 'tmp.tfrec'
 
     for f, label in list(zip(file_list, labels)):
-        data = loader_fn(f).astype(dtype).dtype(dtype)
+        data = loader_fn(f).astype(dtype)
         example = serialize_fn(data, label)
 
         n_bytes += data.nbytes
