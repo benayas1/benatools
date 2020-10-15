@@ -11,10 +11,33 @@ Welcome to benatools's documentation!
    :caption: Contents:
 
 
-
 Indices and tables
 ==================
 
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+
+GBM Module
+=====================
+.. automodule:: benatools.gbm
+   :members:
+
+
+TF Module
+=====================
+.. automodule:: benatools.tf
+   :members:
+
+
+Torch Module
+=====================
+.. automodule:: benatools.torch
+   :members:
+
+
+CT Module
+=====================
+.. automodule:: benatools.ct
+   :members:
