@@ -273,24 +273,34 @@ class GBMFitter:
         return y_pred_val
 
     def get_oof(self, library):
-        """Returns OOF for
+        """
+        Returns OOF for
 
-            Inputs:
-                - library: Whether 'CB', 'XGB' or 'LGB'
+        Parameters
+        ----------
+        library : str
+            Whether 'CB', 'XGB' or 'LGB'
 
-            Output:
-                - Returns a list of Numpy arrays. One array per configuration"""
+        Returns
+        -------
+        list of ndarray
+            One array per configuration"""
         return self.oof[library]
 
     def predict(self, X, categorical=None, mean_function=None):
         """Predicts the regression value without calculating a class
 
-        Inputs:
-            - X: Data to predict a class for
-            - mean_function: Function to run as part of .apply, to average the class result from all columns. It is included in a new column
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Data to predict a class for
+        mean_function : function
+            Function to run as part of .apply, to average the class result from all columns. It is included in a new column
 
-        Output:
-            - Returns a Pandas DataFrame with all the predicted class for each sample (row) and each model (column)"""
+        Returns
+        -------
+        pd.DataFrame
+            All the predicted class for each sample (row) and each model (column)"""
         df = pd.DataFrame()
 
         for i in range(0, len(self.models['CB'])):
