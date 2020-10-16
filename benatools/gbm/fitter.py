@@ -153,18 +153,26 @@ class GBMFitter:
                 self._train(library, model, X_data, y, categorical)  # TODO to be tested
 
     def _train(self, library, model_data, train, validation=None, categorical=[], num_boost_rounds=5000, early_stopping=None, encoder=None):
-        """ Trains a mode on training data, calculates predictions for training and for validation,
+        """
+        Trains a mode on training data, calculates predictions for training and for validation,
         and also creates and fits the corresponding OptRounder object.
 
         Parameters
         ----------
-        library: String indicating the library to calculate the model for (CB, XGB or LGB)
-        model_params: List with model params[0] and number of rounds[1]
-        train: Tuple with train data, train[0] is X and train[1] is y
-        validation: Validation data, validation[0] is X and validation[1] is y
-        categorical: List with the categorical variables
-        num_boost_rounds: Default boosting rounds. Could be overriden by individual values in model_data['n]
-        early_stopping: Default early_stopping. Could be overriden by individual values in model_data['es']
+        library : str
+            String indicating the library to calculate the model for (CB, XGB or LGB)
+        model_params :
+            List with model params[0] and number of rounds[1]
+        train : tuple of (pd.DataFrame, Series or numpy array)
+            Tuple with train data, train[0] is X and train[1] is y
+        validation : tuple of (pd.DataFrame, Series or numpy array), optional
+            Validation data, validation[0] is X and validation[1] is y
+        categorical : list of str
+            List with the categorical variables, optional
+        num_boost_rounds : int, defaults to 5000
+            Default boosting rounds. Could be overriden by individual values in model_data['n]
+        early_stopping : int
+            Default early_stopping. Could be overriden by individual values in model_data['es']
         """
 
         # Get train and validation sets
@@ -288,7 +296,8 @@ class GBMFitter:
         return self.oof[library]
 
     def predict(self, X, categorical=None, mean_function=None):
-        """Predicts the regression value without calculating a class
+        """
+        Predicts the regression value without calculating a class
 
         Parameters
         ----------
@@ -328,12 +337,17 @@ class GBMFitter:
     def predict_class(self, X, mean_function=None):
         """Predicts a class for the given data X. The class is determined by the optimizer, which has been previously fitted.
 
-        Inputs:
-            - X: Data to predict a class for
-            - mean_function: Function to run as part of .apply, to average the class result from all columns. It is included in a new column
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Data to predict a class for
+        mean_function : function
+            Function to run as part of .apply, to average the class result from all columns. It is included in a new column
 
-        Output:
-            - Returns a Pandas DataFrame with all the predicted class for each sample (row) and each model (column)"""
+        Returns
+        -------
+        pd.DataFrame
+            All the predicted class for each sample (row) and each model (column)"""
         df = pd.DataFrame()
 
         # Predict values for every calculated model for Catboost
@@ -361,9 +375,13 @@ class GBMFitter:
         return df
 
     def log(self, message):
-        """ Log training ouput into console and file
-            input:
-                message: message to be logged
+        """
+        Log training ouput into console and file
+
+        Parameters
+        ----------
+        message : str
+            message to be logged
         """
         if self.verbose > 0:
             print(message)
