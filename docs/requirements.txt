@@ -15,3 +15,4 @@ statsmodels
 category_encoders
 vtk
 pydicom
+sphinx==3.2.1
