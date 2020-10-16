@@ -20,14 +20,6 @@ benatools.torch.fitter module
    :undoc-members:
    :show-inheritance:
 
-benatools.torch.fitter\_hp module
----------------------------------
-
-.. automodule:: benatools.torch.fitter_hp
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Module contents
 ---------------
 

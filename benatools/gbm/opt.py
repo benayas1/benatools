@@ -53,20 +53,31 @@ class BaseOptimizer(ABC):
         """
         Performs max_evals using Hyperopt to obtain the best parameters
 
-        Inputs:
-            X_train, y_train, cat_features: Data to build Pool object
-            objective: objective function to minimize. If None, takes standard function
-            cv_folds: number of CV folds for validation on each trial
-            folds: Custom splitting indices. This parameter has the highest priority among other data split parameters.
+        Parameters
+        ----------
+        X_train, y_train, cat_features: Data to build Pool object
+        objective : function
+            Objective function to minimize. If None, takes standard function
+        cv_folds : int
+            number of CV folds for validation on each trial
+        folds : Custom splitting indices.
+            This parameter has the highest priority among other data split parameters.
+        verbose : int
+            0 = no log, 1 = log
+        max_evals : int
+            number of trials to perform
+        max_rounds : int
+            max number of iterations to train every trial
+        seed : int
+            random state seed
+        early_stopping : int
+            early stopping rounds
+        savepath : str
+            json path to save the best results
 
-            verbose: 0 = no log, 1 = log
-            max_evals: number of trials to perform
-            max_rounds: max number of iterations to train every trial
-            seed: random state seed
-            early_stopping: early stopping rounds
-            savepath: json path to save the best results
-
-        Outputs:
+        Returns
+        -------
+        dict
             dict that contains the best params and the best number of iterations
         """
 

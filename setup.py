@@ -15,7 +15,7 @@ REQUIRES_PYTHON = '>=3.6.0'
 VERSION = '0.0.73'
 
 # What packages are required for this module to be executed?
-REQUIRED = [
+requirements = [
           'pandas',
           'numpy',
           'scipy',
@@ -105,7 +105,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    install_requires=REQUIRED,
+    install_requires=requirements,
     python_requires=REQUIRES_PYTHON,
 
     # $ setup.py publish support.

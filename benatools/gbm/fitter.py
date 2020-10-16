@@ -29,14 +29,16 @@ class GBMFitter:
                  metrics=['rmse'], verbose=1, logfile=None):
         """Generates models in a CV manner for all 3 libraries algorithms
 
-        Inputs:
-            - cb_data: a list of CatBoost params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
-            - xgb_data: a list of XGBoost params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
-            - lgb_data: a list of Light GBM params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
-            - folds: Number of folds for CV
-            - feature_selection: the threshold to select features. If -1, takes all
-            - cv_strategy:
-            - use_rounders: boolean to indicate to use rounders """
+        Parameters
+        ----------
+        cb_data: a list of CatBoost params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
+        xgb_data: a list of XGBoost params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
+        lgb_data: a list of Light GBM params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
+        folds: Number of folds for CV
+        feature_selection: the threshold to select features. If -1, takes all
+        cv_strategy:
+        use_rounders: boolean to indicate to use rounders """
+
         self.training_data = {'CB': cb_data, 'XGB': xgb_data, 'LGB': lgb_data}
         self.models = {'CB': [], 'XGB': [], 'LGB': []}  # for each category, generates folds models
         self.oof = {'CB': [], 'XGB': [], 'LGB': []}
@@ -64,12 +66,13 @@ class GBMFitter:
             early_stopping=None):
         """Generates models in a CV manner for all 3 libraries algorithms
 
-        Inputs:
-            - X: Dataframe with features
-            - y: target variable
-            - categorical: a list of categorical variables
-            - folds: Number of folds for CV
-            - feature_selection: the threshold to select features. If -1, takes all"""
+        Parameters
+        ----------
+        X: Dataframe with features
+        y: target variable
+        categorical: a list of categorical variables
+        folds: Number of folds for CV
+        feature_selection: the threshold to select features. If -1, takes all"""
 
         # Fits the data for each library algorithm
         if not skip_CB:
@@ -85,15 +88,16 @@ class GBMFitter:
         """ Fits data into the algorithms. Generates a model per fold, and stores a
         tuple of (model, rounder) into self.models for each fold.
 
-        Inputs:
-            - library: String indicating the library to fit the model for (CB, XGB or LGB)
-            - X: Dataframe with features
-            - y: target variable
-            - categorical: a list of categorical variables
-            - folds: Number of folds for CV
-            - feature_selection: the threshold to select features. If -1, takes all
-            - num_boost_rounds: Default boosting rounds
-            - early_stopping: Default early_stopping
+        Parameters
+        ----------
+        library: String indicating the library to fit the model for (CB, XGB or LGB)
+        X: Dataframe with features
+        y: target variable
+        categorical: a list of categorical variables
+        folds: Number of folds for CV
+        feature_selection: the threshold to select features. If -1, takes all
+        num_boost_rounds: Default boosting rounds
+        early_stopping: Default early_stopping
         """
 
         if not self.training_data[library]:
@@ -152,15 +156,16 @@ class GBMFitter:
         """ Trains a mode on training data, calculates predictions for training and for validation,
         and also creates and fits the corresponding OptRounder object.
 
-        Inputs:
-            - library: String indicating the library to calculate the model for (CB, XGB or LGB)
-            - model_params: List with model params[0] and number of rounds[1]
-            - train: Tuple with train data, train[0] is X and train[1] is y
-            - validation: Validation data, validation[0] is X and validation[1] is y
-            - categorical: List with the categorical variables
-            - num_boost_rounds: Default boosting rounds. Could be overriden by individual values in model_data['n]
-            - early_stopping: Default early_stopping. Could be overriden by individual values in model_data['es']
-            """
+        Parameters
+        ----------
+        library: String indicating the library to calculate the model for (CB, XGB or LGB)
+        model_params: List with model params[0] and number of rounds[1]
+        train: Tuple with train data, train[0] is X and train[1] is y
+        validation: Validation data, validation[0] is X and validation[1] is y
+        categorical: List with the categorical variables
+        num_boost_rounds: Default boosting rounds. Could be overriden by individual values in model_data['n]
+        early_stopping: Default early_stopping. Could be overriden by individual values in model_data['es']
+        """
 
         # Get train and validation sets
         start = time.time()

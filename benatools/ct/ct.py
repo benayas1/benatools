@@ -16,7 +16,23 @@ from plotly.graph_objs import *
 
 def load_scan(paths, library='vtk', resample_scan=True):
     """
-    Load
+    Load a scan
+
+    Parameters
+    ----------
+    library : str
+        engine to be used to load scan
+    resample_scan : bool
+        whether to resample or not a scan
+
+    Returns
+    -------
+    ndarray
+        numpy array containing all the CT scan slices
+
+    Raise
+    -----
+    library not supported
     """
     if library == 'vtk':
         return load_vtk(paths, resample_scan=resample_scan)
@@ -27,11 +43,17 @@ def load_scan(paths, library='vtk', resample_scan=True):
 def load_pydicom(paths, resample_scan=True, return_spacing=False):
     """
     Function to read all DICOM files belonging to a scan. The functions sorts the slices in order.
-        Inputs:
-            paths: list of paths to read. Normally you should use glob to get the files
-            return_thickness: return slice thickness
-        Outputs:
-            slices: List of slices sorted by Instance Number
+
+    Parameters
+    ----------
+    paths : list of str
+        list of paths to read. Normally you should use glob to get the files
+    return_thickness : bool
+        return slice thickness
+
+    Returns
+    -------
+    List of slices sorted by Instance Number
     """
     slices, spacing = load_slices(paths, return_spacing=True)
     hu_scan = get_pixels_hu(slices)
@@ -48,11 +70,17 @@ def load_pydicom(paths, resample_scan=True, return_spacing=False):
 def load_slices(paths, return_spacing=False):
     """
     Function to read all DICOM files belonging to a scan. The functions sorts the slices in order.
-        Inputs:
-            paths: list of paths to read. Normally you should use glob to get the files
-            return_thickness: return slice thickness
-        Outputs:
-            slices: List of slices sorted by Instance Number
+    Parameters
+    ----------
+    paths : list of str
+        list of paths to read. Normally you should use glob to get the files
+    return_thickness : bool
+        return slice thickness
+
+    Outputs
+    -------
+    slices :
+        List of slices sorted by Instance Number
     """
     slices = [pydicom.read_file(path) for path in paths]
     slices.sort(key=lambda x: int(x.InstanceNumber), reverse=True)

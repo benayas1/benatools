@@ -5,23 +5,13 @@ Subpackages
 -----------
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 1
 
    benatools.ct
    benatools.gbm
    benatools.tf
    benatools.torch
-
-Submodules
-----------
-
-benatools.tools module
-----------------------
-
-.. automodule:: benatools.tools
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   benatools.utils
 
 Module contents
 ---------------

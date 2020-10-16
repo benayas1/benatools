@@ -80,7 +80,8 @@ class TorchFitter:
     def fit(self, train_loader, validation_loader, n_epochs=1, early_stopping=0, metric=None, metric_kwargs=None, early_stopping_mode='min', save_checkpoint=True):
         """ Fits a model
 
-        Inputs:
+        Parameters
+        ----------
             train_loader: Training data
             validation_loader: Validation Data
             n_epochs: maximum number of epochs to train
@@ -197,11 +198,18 @@ class TorchFitter:
         return summary_loss, calculated_metric
 
     def train_one_epoch(self, train_loader):
-        """ Run one epoch on the train dataset
-            inputs:
-                train_loader: DataLoader containing the training dataset
-            outputs:
-                summary_loss: AverageMeter object with this epochs's average loss
+        """
+        Run one epoch on the train dataset
+
+        Parameters
+        ----------
+        train_loader : torch.DataLoader
+            DataLoaders containing the training dataset
+
+        Returns
+        -------
+        summary_loss: AverageMeter
+            object with this epochs's average loss
         """
         self.model.train()  # set train mode
         summary_loss = AverageMeter()  # object to track the average loss
@@ -240,9 +248,15 @@ class TorchFitter:
         return summary_loss
 
     def save(self, path, verbose=True):
-        """ Save model and other metadata
-        input:
-            path: path of the file to be saved
+        """
+        Save model and other metadata
+
+        Parameters
+        ----------
+        path : str
+            path of the file to be saved
+        verbose : int
+            1 = print logs, 0 = silence
         """
         if verbose:
             self.log(f'Model is saved to {path}')
@@ -256,9 +270,13 @@ class TorchFitter:
         }, path)
 
     def load(self, path):
-        """ Load model and other metadata
-            input:
-                path: path of the file to be loaded
+        """
+        Load model and other metadata
+
+        Parameters
+        ----------
+        path : str
+            path of the file to be loaded
         """
         checkpoint = torch.load(path)
         self.model.load_state_dict(checkpoint['model_state_dict'])
@@ -268,9 +286,13 @@ class TorchFitter:
         self.epoch = checkpoint['epoch'] + 1
 
     def log(self, message):
-        """ Log training ouput into console and file
-            input:
-                message: message to be logged
+        """
+        Log training ouput into console and file
+
+        Parameters
+        ----------
+        message : str
+            message to be logged
         """
         if self.verbose > 0:
             print(message)
@@ -306,11 +328,17 @@ class TorchFitterBoxes(TorchFitter):
         return summary_loss
 
     def train_one_epoch(self, train_loader):
-        """ Run one epoch on the train dataset
-            inputs:
+        """
+        Run one epoch on the train dataset
+
+        Parameters
+        ----------
                 train_loader: DataLoader containing the training dataset
-            outputs:
-                summary_loss: AverageMeter object with this epochs's average loss
+
+        Returns
+        -------
+        summary_loss : AverageMeter
+            object with this epochs's average loss
         """
         self.model.train()  # set train mode
         summary_loss = AverageMeter()  # object to track the average loss
