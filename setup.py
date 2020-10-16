@@ -31,7 +31,9 @@ requirements = [
           'lightgbm',
           'hyperopt',
           'statsmodels',
-          'category_encoders'
+          'category_encoders',
+          'vtk',
+          'pydicom'
 ]
 
 here = os.path.abspath(os.path.dirname(__file__))
