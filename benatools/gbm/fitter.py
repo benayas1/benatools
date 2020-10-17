@@ -25,19 +25,19 @@ class _Folds:
 
 # Class to hold and train many models (CB, XGB and LGB) on the same dataset
 class GBMFitter:
-    def __init__(self, cb_data=None, xgb_data=None, lgb_data=None, cv_strategy=None, cv_groups=None, use_rounders=False,
-                 metrics=['rmse'], verbose=1, logfile=None):
-        """Generates models in a CV manner for all 3 libraries algorithms
+    """Generates models in a CV manner for all 3 libraries algorithms
 
         Parameters
         ----------
         cb_data: a list of CatBoost params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
         xgb_data: a list of XGBoost params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
         lgb_data: a list of Light GBM params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
-        folds: Number of folds for CV
-        feature_selection: the threshold to select features. If -1, takes all
         cv_strategy:
-        use_rounders: boolean to indicate to use rounders """
+        use_rounders : boolean
+            To indicate to use rounders """
+    def __init__(self, cb_data=None, xgb_data=None, lgb_data=None, cv_strategy=None, cv_groups=None, use_rounders=False,
+                 metrics=['rmse'], verbose=1, logfile=None):
+
 
         self.training_data = {'CB': cb_data, 'XGB': xgb_data, 'LGB': lgb_data}
         self.models = {'CB': [], 'XGB': [], 'LGB': []}  # for each category, generates folds models
@@ -64,15 +64,22 @@ class GBMFitter:
 
     def fit(self, X, y, categorical=None, feature_selection=-1, skip_CB=False, skip_XGB=False, skip_LGB=False, num_boost_rounds=5000,
             early_stopping=None):
-        """Generates models in a CV manner for all 3 libraries algorithms
+        """
+        Generates models in a CV manner for all 3 libraries algorithms
 
         Parameters
         ----------
-        X: Dataframe with features
-        y: target variable
-        categorical: a list of categorical variables
-        folds: Number of folds for CV
-        feature_selection: the threshold to select features. If -1, takes all"""
+        X: pd.Dataframe
+            Training data
+        y: Series or numpy array
+            Target variable
+        categorical : list of str
+            A list of categorical variables
+        folds : int
+            Number of folds for CV
+        feature_selection : float
+            The threshold to select features. If -1, takes all
+        """
 
         # Fits the data for each library algorithm
         if not skip_CB:

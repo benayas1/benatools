@@ -150,6 +150,14 @@ def dropout(image, height=256, width=256, prob=0.75, ct=8, sz=0.2):
     image = tf.reshape(image, [height, width, 3])
     return image
 
+def mixup_labels(label1, label2, n_classes, a):
+    if len(label1.shape) == 1:
+        lab1 = tf.one_hot(label1, n_classes)
+        lab2 = tf.one_hot(label2, n_classes)
+    else:
+        lab1 = label1
+        lab2 = label2
+    return (1 - a) * lab1 + a * lab2
 
 def cutmix(image, label, batch_size=16, dimension=256, n_classes = 1, prob=1.0):
     # input image - is a batch of images of size [n,dim,dim,3] not a single image of [dim,dim,3]
