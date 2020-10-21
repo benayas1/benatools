@@ -2,6 +2,9 @@ import tensorflow as tf
 
 
 def _log(s, verbose):
+    """
+    Prints a message on the screen
+    """
     if verbose:
         print(s)
 
@@ -10,13 +13,22 @@ def get_device_strategy(device, verbose=True):
     """
     Returns the distributed strategy object, the tune policy anb the number of replicas.
 
-    Inputs:
-        device: string indicating the device to run on. Possible values are "TPU", "GPU", "CPU"
-        verbose: Whether to print the messages or not
-    Outputs:
-        strategy: The distributed strategy object
-        tune: the auto tune object
-        replicas: int indicating the number of replicas, to adjust batch size and learning rate
+    Parameters
+    ----------
+        device : str
+            Possible values are "TPU", "GPU", "CPU"
+        verbose : bool
+            Whether to print the output messages or not
+    Returns
+    -------
+    tf.distribute.TPUStrategy
+        The distributed strategy object
+    int
+        The auto tune constant
+    int
+        Number of TPU cores, to adjust batch size and learning rate
+    tf.distribute.cluster_resolver.TPUClusterResolver
+        The tpu object
     """
     device = device.upper()
     v = tf.__version__
@@ -63,8 +75,10 @@ def init_tpu(tpu):
     """
     Re-initializes the TPU cluster, useful to clean up memory
 
-    Inputs:
-        Tpu: the TPU cluster
+    Parameters
+    ----------
+    tf.distribute.cluster_resolver.TPUClusterResolver
+        The TPU cluster
     """
     if tpu:
         tf.tpu.experimental.initialize_tpu_system(tpu)
