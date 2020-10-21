@@ -46,7 +46,7 @@ def get_mat3d(rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0, x_sh
     """
 
     # CONVERT DEGREES TO RADIANS
-    rotation = _check_rotation_arg(rotation)
+    # rotation = _check_rotation_arg(rotation)
 
     def get_4x4_mat(lst):
         return tf.reshape(tf.concat([lst], axis=0), [4, 4])
@@ -56,47 +56,47 @@ def get_mat3d(rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0, x_sh
     zero = tf.constant([0], dtype='float32')
 
     # X axis
-    r = math.pi * rotation[0] / 180.
+    r = math.pi * rotation[0:1] / 180.
     cx = tf.math.cos(r)
     sx = tf.math.sin(r)
-    rx = get_4x4_mat([one,  zero, zero, zero,
+    rx = get_4x4_mat([one, zero, zero, zero,
                       zero, cx, -sx, zero,
-                      zero, sx,  cx, zero,
+                      zero, sx, cx, zero,
                       zero, zero, zero, one])
 
     # Y axis
-    r = math.pi * rotation[1] / 180.
+    r = math.pi * rotation[1:2] / 180.
     cy = tf.math.cos(r)
     sy = tf.math.sin(r)
-    ry = get_4x4_mat([cy,  zero, sy, zero,
+    ry = get_4x4_mat([cy, zero, sy, zero,
                       zero, one, zero, zero,
-                      -sy, zero,  cy, zero,
+                      -sy, zero, cy, zero,
                       zero, zero, zero, one])
 
     # Z axis
-    r = math.pi * rotation[2] / 180.
+    r = math.pi * rotation[2:] / 180.
     cz = tf.math.cos(r)
     sz = tf.math.sin(r)
     rz = get_4x4_mat([cz, -sz, zero, zero,
                       sz, cz, zero, zero,
-                      zero, zero,  one, zero,
+                      zero, zero, one, zero,
                       zero, zero, zero, one])
 
-    rotation_matrix = np.random.choice([rx, ry, rz])
+    rotation_matrix = [rx, ry, rz][tf.random.uniform([], minval=0, maxval=3, dtype=tf.int32)]
 
     # SHEAR MATRIX
     shear = math.pi * shear / 180.
     c2 = tf.math.cos(shear)
     s2 = tf.math.sin(shear)
 
-    shear_matrix = get_4x4_mat([one, s2, zero,
-                                zero, c2, zero,
-                                zero, zero, one])
+    # shear_matrix = get_4x4_mat([one, s2, zero,
+    #                            zero, c2, zero,
+    #                            zero, zero, one])
     # ZOOM MATRIX
     zoom_matrix = get_4x4_mat([one / x_zoom, zero, zero, zero,
                                zero, one / y_zoom, zero, zero,
-                               zero, zero, one/ z_zoom, zero,
-                               zero, zero, zero , one])
+                               zero, zero, one / z_zoom, zero,
+                               zero, zero, zero, one])
     # SHIFT MATRIX
     shift_matrix = get_4x4_mat([one, zero, zero, x_shift,
                                 zero, one, zero, y_shift,
@@ -106,7 +106,9 @@ def get_mat3d(rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0, x_sh
     return K.dot(rotation_matrix,
                  K.dot(zoom_matrix, shift_matrix))
 
-def transform3d(object, dimension, rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0, x_shift=8.0, y_shift=8.0, z_shift=8.0, prob=0.5):
+
+def transform3d(obj, dimension, rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0, x_shift=8.0, y_shift=8.0,
+                z_shift=8.0, prob=1.0):
     """
     Rotates, shears, zooms and shift an single object, not a batch of them.
 
@@ -153,14 +155,17 @@ def transform3d(object, dimension, rotation=None, shear=2.0, x_zoom=8.0, y_zoom=
     y_shift = y_shift * tf.random.normal([1], dtype='float32')
     z_shift = z_shift * tf.random.normal([1], dtype='float32')
 
+    # print(rot,shr,x_zoom,y_zoom,z_zoom)
+
     # GET TRANSFORMATION MATRIX
     m = get_mat3d(rot, shr, x_zoom, y_zoom, z_zoom, x_shift, y_shift, z_shift)
 
     # LIST DESTINATION PIXEL INDICES
-    x = tf.repeat(tf.range(DIM // 2, -DIM // 2, -1), DIM)
-    y = tf.tile(tf.range(-DIM // 2, DIM // 2), [DIM])
-    z = tf.ones([DIM * DIM], dtype='int32')
-    idx = tf.stack([x, y, z])
+    x = tf.repeat(tf.range(DIM // 2, -DIM // 2, -1), DIM * DIM)
+    y = tf.tile(tf.repeat(tf.range(DIM // 2, -DIM // 2, -1), DIM), [DIM])
+    z = tf.tile(tf.range(-DIM // 2, DIM // 2), [DIM * DIM])
+    c = tf.ones([DIM * DIM * DIM], dtype='int32')
+    idx = tf.stack([x, y, z, c])
 
     # ROTATE DESTINATION PIXELS ONTO ORIGIN PIXELS
     idx2 = K.dot(m, tf.cast(idx, dtype='float32'))
@@ -168,8 +173,8 @@ def transform3d(object, dimension, rotation=None, shear=2.0, x_zoom=8.0, y_zoom=
     idx2 = K.clip(idx2, -DIM // 2 + XDIM + 1, DIM // 2)
 
     # FIND ORIGIN PIXEL VALUES
-    idx3 = tf.stack([DIM // 2 - idx2[0,], DIM // 2 - 1 + idx2[1,]])
-    d = tf.gather_nd(object, tf.transpose(idx3))
+    idx3 = tf.stack([DIM // 2 - idx2[0,], DIM // 2 - idx2[1,], DIM // 2 - 1 + idx2[2,]])
+    d = tf.gather_nd(obj, tf.transpose(idx3))
 
     return tf.reshape(d, [DIM, DIM, DIM, 3])
 
