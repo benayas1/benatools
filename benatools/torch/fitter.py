@@ -4,8 +4,6 @@ import numpy as np
 from datetime import datetime
 import time
 import pandas as pd
-from glob import glob
-#from apex import amp
 
 
 class AverageMeter(object):
@@ -222,7 +220,8 @@ class TorchFitter:
         return pd.DataFrame(training_history).set_index('epoch')
 
     def validation(self, val_loader, metric=None, metric_kwargs=None):
-        """ Fits a model
+        """
+        Validates a model
 
         Parameters
         ----------
@@ -383,6 +382,25 @@ class TorchFitter:
 class TorchFitterBoxes(TorchFitter):
 
     def validation(self, val_loader):
+        """
+        Validates a model
+
+        Parameters
+        ----------
+        val_loader : torch.utils.data.DataLoader
+            Validation Data
+        metric : function with (y_true, y_pred, **metric_kwargs) signature
+            Metric to evaluate results on
+        metric_kwargs : dict
+            Arguments for the passed metric. Ignored if metric is None
+
+        Returns
+        -------
+        AverageMeter
+            object with this epochs's average loss
+        float
+            calculated metric if a metric is provided, else None
+        """
         self.model.eval()
         summary_loss = AverageMeter()
         t = time.time()
@@ -413,11 +431,12 @@ class TorchFitterBoxes(TorchFitter):
 
         Parameters
         ----------
-                train_loader: DataLoader containing the training dataset
+        train_loader : torch.DataLoader
+            DataLoaders containing the training dataset
 
         Returns
         -------
-        summary_loss : AverageMeter
+        AverageMeter
             object with this epochs's average loss
         """
         self.model.train()  # set train mode

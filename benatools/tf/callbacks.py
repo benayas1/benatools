@@ -5,17 +5,29 @@ import numpy as np
 
 
 def get_lr_callback(lr_start=0.000005, lr_max=0.00000125, lr_min=0.000001, lr_ramp_ep=5, lr_sus_ep=0, lr_decay=0.8):
-    """ Train schedule for transfer learning. The learning rate starts near zero, then increases to a maximum, then decays over time.
-        A good practice to follow is to increase maximum learning rate as batch size increase
+    """
+    Train schedule for transfer learning. The learning rate starts near zero, then increases to a maximum, then decays over time.
+    A good practice to follow is to increase maximum learning rate as batch size increase
 
-        Input:
-            batch_size
-            lr_start: initial learning rate value
-            lr_max: maximum learning rate.
-            lr_min: minimum learning rate.
-            lr_ramp_ep: number of epochs of ramp up
-            lr_sus_ep: number of epochs of plateau
-            lr_decay: decay [0,1]
+    Parameters
+    ----------
+    lr_start : float
+        initial learning rate value
+    lr_max : float
+        maximum learning rate.
+    lr_min : float
+        minimum learning rate.
+    lr_ramp_ep :
+        number of epochs of ramp up
+    lr_sus_ep : float
+        number of epochs of plateau
+    lr_decay : float
+        decay [0,1]
+
+    Returns
+    -------
+    tf.keras.callbacks.LearningRateScheduler
+        Scheduler object
     """
     def lrfn(epoch):
         if epoch < lr_ramp_ep:

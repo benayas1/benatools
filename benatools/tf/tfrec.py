@@ -34,10 +34,10 @@ def serialize_example(data, label):
 
     Parameters
     ----------
-    data :
-
-    label :
-
+    data : ndarray
+        sample in numpy format
+    label : int or float
+        label of the sample
     """
     # Create a dictionary mapping the feature name to the tf.Example-compatible data type.
     feature = {
