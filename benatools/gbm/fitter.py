@@ -29,9 +29,12 @@ class GBMFitter:
 
         Parameters
         ----------
-        cb_data: a list of CatBoost params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
-        xgb_data: a list of XGBoost params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
-        lgb_data: a list of Light GBM params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
+        cb_data:
+            list of CatBoost params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
+        xgb_data :
+            list of XGBoost params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
+        lgb_data :
+            list of Light GBM params and iterations dicts. Syntax is [{'params':params, 'n':iteration}]
         cv_strategy:
         use_rounders : boolean
             To indicate to use rounders """

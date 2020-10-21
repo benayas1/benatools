@@ -9,7 +9,19 @@ from glob import glob
 
 
 class AverageMeter(object):
-    """ Computes and stores the average and current value
+    """
+    Computes and stores the average and current value
+
+    Attributes
+    ----------
+    val : float
+        Stores the average loss of the last batch
+    avg : float
+        Average loss
+    sum : float
+        Sum of all losses
+    count : int
+        number of elements
     """
     def __init__(self):
         self.val = 0
@@ -24,6 +36,16 @@ class AverageMeter(object):
         self.count = 0
 
     def update(self, val, n=1):
+        """
+        Updates current internal state
+
+        Parameters
+        ----------
+        val : float
+            loss on each training step
+        n : int, Optional
+            batch size
+        """
         self.val = val
         self.sum += val * n
         self.count += n
@@ -31,6 +53,29 @@ class AverageMeter(object):
 
 
 class TorchFitter:
+    """
+    Helper class to implement a training loop in PyTorch
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Model to be fitted
+    device : int
+        Number of splits
+    loss : torch.nn.loss object or function returning
+        DataFrame to split
+    optimizer : torch.optim object
+        Optimizer object
+    schedule :
+        Scheduler object
+    validation schedule :
+        Scheduler object for the validation step
+    step_scheduler=False:
+    folder : str
+        Optional, folder where to store checkpoints
+    verbose : int, defaults to 0
+        number of step to print every training summary
+    """
 
     def __init__(self,
                  model,
@@ -38,10 +83,11 @@ class TorchFitter:
                  loss,
                  optimizer,
                  scheduler=None,
-                 folder='models',
-                 verbose=0,
                  validation_scheduler=True,
-                 step_scheduler=False):
+                 step_scheduler=False,
+                 folder='models',
+                 verbose=0
+                 ):
 
         if type(loss) == type:
             self.loss_function = loss()
@@ -77,16 +123,31 @@ class TorchFitter:
         self.step_scheduler = step_scheduler  # do scheduler.step after optimizer.step
         self.log(f'Fitter prepared. Device is {self.device}')
 
-    def fit(self, train_loader, validation_loader, n_epochs=1, early_stopping=0, metric=None, metric_kwargs=None, early_stopping_mode='min', save_checkpoint=True):
+    def fit(self, train_loader, val_loader, n_epochs=1, metric=None, metric_kwargs=None, early_stopping=0, early_stopping_mode='min', save_checkpoint=True):
         """ Fits a model
 
         Parameters
         ----------
-            train_loader: Training data
-            validation_loader: Validation Data
-            n_epochs: maximum number of epochs to train
-        Outputs:
-            returns a pandas DataFrame object with training history
+        train_loader : torch.utils.data.DataLoader
+            Training data
+        val_loader : torch.utils.data.DataLoader
+            Validation Data
+        n_epochs : int
+            maximum number of epochs to train
+        metric : function with (y_true, y_pred, **metric_kwargs) signature
+            Metric to evaluate results on
+        metric_kwargs : dict
+            Arguments for the passed metric. Ignored if metric is None
+        early_stopping : int
+            Early stopping epochs
+        early_stopping_mode : str
+            min or max
+        save_checkpoint : bool
+            whether to save the checkpoint when training
+
+        Returns
+        -------
+        returns a pandas DataFrame object with training history
         """
         self.best_metric = 10 ** 5 if early_stopping_mode == 'min' else -10 ** 5
 
@@ -114,7 +175,7 @@ class TorchFitter:
 
             # Run epoch validation
             t = time.time()
-            val_summary_loss, calculated_metric = self.validation(validation_loader, metric, metric_kwargs)
+            val_summary_loss, calculated_metric = self.validation(val_loader, metric, metric_kwargs)
             history['val'] = val_summary_loss.avg  # validation loss
             history['lr'] = self.optimizer.param_groups[0]['lr']
 
@@ -161,6 +222,25 @@ class TorchFitter:
         return pd.DataFrame(training_history).set_index('epoch')
 
     def validation(self, val_loader, metric=None, metric_kwargs=None):
+        """ Fits a model
+
+        Parameters
+        ----------
+        val_loader : torch.utils.data.DataLoader
+            Validation Data
+        metric : function with (y_true, y_pred, **metric_kwargs) signature
+            Metric to evaluate results on
+        metric_kwargs : dict
+            Arguments for the passed metric. Ignored if metric is None
+
+        Returns
+        -------
+        AverageMeter
+            object with this epochs's average loss
+        float
+            calculated metric if a metric is provided, else None
+        """
+
         self.model.eval()
         summary_loss = AverageMeter()
         y_preds = []
@@ -208,7 +288,7 @@ class TorchFitter:
 
         Returns
         -------
-        summary_loss: AverageMeter
+        AverageMeter
             object with this epochs's average loss
         """
         self.model.train()  # set train mode

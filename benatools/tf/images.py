@@ -3,7 +3,112 @@ import math
 import tensorflow.keras.backend as K
 
 
-def get_mat(rotation=180.0, shear=2.0, height_zoom=8.0, width_zoom=8.0, height_shift=8.0, width_shift=8.0):
+def get_mat3d(rotation=180.0, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0,  x_shift=8.0, y_shift=8.0, z_shift=8.0):
+    """Creates a transformation matrix which rotates, shears, zooms and shift an image.
+
+    Inputs:
+        rotation: degrees to rotate
+        shear: degrees to shear
+        height_zoom: height zoom ratio
+        width_zoom: width zoom ratio
+        height_shift: height shift ratio
+        width_shift: width shift ratio
+
+    Outputs:
+        3 x3 transformation matrix
+    """
+
+    # CONVERT DEGREES TO RADIANS
+    rotation = math.pi * rotation / 180.
+    shear = math.pi * shear / 180.
+
+    def get_4x4_mat(lst):
+        return tf.reshape(tf.concat([lst], axis=0), [4, 4])
+
+    # ROTATION MATRIX
+    c1 = tf.math.cos(rotation)
+    s1 = tf.math.sin(rotation)
+    one = tf.constant([1], dtype='float32')
+    zero = tf.constant([0], dtype='float32')
+
+    rotation_matrix = get_4x4_mat([c1, s1, zero,
+                                   -s1, c1, zero,
+                                   zero, zero, one])
+    # SHEAR MATRIX
+    c2 = tf.math.cos(shear)
+    s2 = tf.math.sin(shear)
+
+    shear_matrix = get_4x4_mat([one, s2, zero,
+                                zero, c2, zero,
+                                zero, zero, one])
+    # ZOOM MATRIX
+    zoom_matrix = get_4x4_mat([one / x_zoom, zero, zero, zero,
+                               zero, one / y_zoom, zero, zero,
+                               zero, zero, one/ z_zoom, zero,
+                               zero, zero, zero , one])
+    # SHIFT MATRIX
+    shift_matrix = get_4x4_mat([one, zero, zero, x_shift,
+                                zero, one, zero, y_shift,
+                                zero, zero, one, z_shift,
+                                zero, zero, zero, one])
+
+    return K.dot(zoom_matrix, shift_matrix)
+
+def transform3d(image, dimension, rotate=180.0, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0,  x_shift=8.0, y_shift=8.0, z_shift=8.0, prob=0.5):
+    """ transforms an image by rotating, zooming a shearing
+
+    Input:
+        image: image of size [dim,dim,dim,3] not a batch of [b,dim,dim,dim,3]
+        dimension: image dimension
+        rotation: degrees to rotate
+        shear: degrees to shear
+        height_zoom: height zoom ratio
+        width_zoom: width zoom ratio
+        height_shift: height shift ratio
+        width_shift: width shift ratio
+        prob: probability to perform transformation
+
+    Output:
+        image randomly rotated, sheared, zoomed, and shifted
+    """
+
+    P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
+    if P == 0:
+        return image  # no action
+
+    DIM = dimension
+    XDIM = DIM % 2
+
+    rot = rotate * tf.random.normal([1], dtype='float32')
+    shr = shear * tf.random.normal([1], dtype='float32')
+    x_zoom = 1.0 + tf.random.normal([1], dtype='float32') / x_zoom
+    y_zoom = 1.0 + tf.random.normal([1], dtype='float32') / y_zoom
+    z_zoom = 1.0 + tf.random.normal([1], dtype='float32') / z_zoom
+    x_shift = x_shift * tf.random.normal([1], dtype='float32')
+    y_shift = y_shift * tf.random.normal([1], dtype='float32')
+    z_shift = y_shift * tf.random.normal([1], dtype='float32')
+
+    # GET TRANSFORMATION MATRIX
+    m = get_mat3d(rot, shr, x_zoom, y_zoom, z_zoom, x_shift, y_shift, z_shift)
+
+    # LIST DESTINATION PIXEL INDICES
+    x = tf.repeat(tf.range(DIM // 2, -DIM // 2, -1), DIM)
+    y = tf.tile(tf.range(-DIM // 2, DIM // 2), [DIM])
+    z = tf.ones([DIM * DIM], dtype='int32')
+    idx = tf.stack([x, y, z])
+
+    # ROTATE DESTINATION PIXELS ONTO ORIGIN PIXELS
+    idx2 = K.dot(m, tf.cast(idx, dtype='float32'))
+    idx2 = K.cast(idx2, dtype='int32')
+    idx2 = K.clip(idx2, -DIM // 2 + XDIM + 1, DIM // 2)
+
+    # FIND ORIGIN PIXEL VALUES
+    idx3 = tf.stack([DIM // 2 - idx2[0,], DIM // 2 - 1 + idx2[1,]])
+    d = tf.gather_nd(image, tf.transpose(idx3))
+
+    return tf.reshape(d, [DIM, DIM, DIM, 3])
+
+def get_mat2d(rotation=180.0, shear=2.0, height_zoom=8.0, width_zoom=8.0, height_shift=8.0, width_shift=8.0):
     """Creates a transformation matrix which rotates, shears, zooms and shift an image.
 
     Inputs:
@@ -87,7 +192,7 @@ def transform(image, dimension, rotate=180.0, shear=2.0, hzoom=8.0, vzoom=8.0, h
     w_shift = wshift * tf.random.normal([1], dtype='float32')
 
     # GET TRANSFORMATION MATRIX
-    m = get_mat(rot, shr, h_zoom, w_zoom, h_shift, w_shift)
+    m = get_mat2d(rot, shr, h_zoom, w_zoom, h_shift, w_shift)
 
     # LIST DESTINATION PIXEL INDICES
     x = tf.repeat(tf.range(DIM // 2, -DIM // 2, -1), DIM)

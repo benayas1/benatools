@@ -69,6 +69,43 @@ def cbam_module(input, reduction_ratio=8, kernel_size=7):
     x = x * input
     return x
 
+def cbam_module_3d(input, reduction_ratio=8, kernel_size=7):
+    """
+    CBAM Convolutional Block Attention Module
+    https://arxiv.org/pdf/1807.06521.pdf
+
+    """
+    n, h, w, d, c = input.shape  # (N,H,W,D,C)
+
+    dense = tf.keras.Sequential([tf.keras.layers.Flatten(),
+                                 tf.keras.layers.Dense(c / reduction_ratio),
+                                 tf.keras.layers.Activation('relu'),
+                                 tf.keras.layers.Dense(c)])
+
+    # Channel attention module
+    x1 = tf.keras.layers.GlobalAveragePooling3D(name='cbam3d_channel_avgpooling')(input)
+    x1 = dense(x1)
+
+    x2 = tf.keras.layers.GlobalMaxPooling3D(name='cbam3d_channel_maxpooling')(input)
+    x2 = dense(x2)
+
+    x = tf.keras.layers.Add(name='cbam3d_channel_addpooling')([x1, x2])
+    x = tf.keras.layers.Activation('sigmoid', name='cbam3d_channel_activation')(x)
+    x = tf.keras.layers.Reshape(target_shape=[1,1,1,-1])(x)
+
+    x = x * input
+
+    # Spatial Attention Map
+    xavg = tf.expand_dims(tf.math.reduce_mean(input_tensor=x, axis=3), axis=3)
+    xmax = tf.expand_dims(tf.math.reduce_max(input_tensor=x, axis=3), axis=3)
+
+    x = tf.keras.layers.concatenate([xavg, xmax], name='cbam3d_spatial_concat')
+    x = tf.keras.layers.Conv3D(filters=1, kernel_size=kernel_size, padding='same', name='cbam3d_spatial_conv3d')(x)
+    x = tf.keras.layers.Activation('sigmoid')(x)
+
+    x = x * input
+    return x
+
 
 def scaled_dot_product_attention(q, k, v, mask):
     """Calculate the attention weights.

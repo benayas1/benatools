@@ -80,7 +80,7 @@ class MultiStratifiedKFold():
         test_idx : ndarray
             The testing set indices for that split.
         """
-        train_idx = np.concatenate([self.indices[i] for i in range(self.folds) if i != fold])
+        train_idx = np.concatenate([self.indices[i] for i in range(self.n_splits) if i != fold])
         val_idx = self.indices[fold]
         return train_idx, val_idx
     
@@ -206,16 +206,20 @@ class BaseOptimizeBlend(ABC):
 
         Returns
         -------
-        ndarray with shape (n_models,):
+        ndarray with shape (n_models,)
             The calculated coefficients.
         """
         return self._coef
 
 
-def to_df(file):
+def read_df(file):
     """
     Read Dataframe from file, based on file extension
-    file is a path with an extension
+
+    Parameters
+    ----------
+    file : str
+        Path with an extension of type ``.csv``, ``.feather`` or ``.parquet``
     """
     extension = file.split('.')[1]
     if extension == 'csv':
