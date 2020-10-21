@@ -1,40 +1,91 @@
 import tensorflow as tf
 import math
 import tensorflow.keras.backend as K
+import numpy as np
+import collections
+
+def _check_rotation_arg(x):
+    """ Returns a list of rotation args"""
+    if x is None:
+        return [90, 90, 90]
+
+    if np.isscalar(x):
+        return [x, x, x]
+
+    if isinstance(x, (collections.Sequence, np.ndarray, tf.Tensor)):
+        if len(x) < 3:
+            raise Exception("Rotation parameter must have length 3")
+        return x[:3]
+
+    raise Exception("Rotation parameter must be a scalar or a list of length 3")
 
 
-def get_mat3d(rotation=180.0, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0,  x_shift=8.0, y_shift=8.0, z_shift=8.0):
-    """Creates a transformation matrix which rotates, shears, zooms and shift an image.
+def get_mat3d(rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0, x_shift=8.0, y_shift=8.0, z_shift=8.0):
+    """
+    Creates a transformation matrix which rotates, shears, zooms and shift an 2D image.
 
-    Inputs:
-        rotation: degrees to rotate
-        shear: degrees to shear
-        height_zoom: height zoom ratio
-        width_zoom: width zoom ratio
-        height_shift: height shift ratio
-        width_shift: width shift ratio
+    Parameters
+    ----------
+    rotation : float
+        Degrees to rotate
+    shear : float
+        Degrees to shear
+    height_zoom : float
+        height zoom ratio
+    width_zoom : float
+        width zoom ratio
+    height_shift : float
+        height shift ratio
+    width_shift : float
+        width shift ratio
 
-    Outputs:
-        3 x3 transformation matrix
+    Returns
+    -------
+    tf.tensor
+        3x3 transformation matrix
     """
 
     # CONVERT DEGREES TO RADIANS
-    rotation = math.pi * rotation / 180.
-    shear = math.pi * shear / 180.
+    rotation = _check_rotation_arg(rotation)
 
     def get_4x4_mat(lst):
         return tf.reshape(tf.concat([lst], axis=0), [4, 4])
 
     # ROTATION MATRIX
-    c1 = tf.math.cos(rotation)
-    s1 = tf.math.sin(rotation)
     one = tf.constant([1], dtype='float32')
     zero = tf.constant([0], dtype='float32')
 
-    rotation_matrix = get_4x4_mat([c1, s1, zero,
-                                   -s1, c1, zero,
-                                   zero, zero, one])
+    # X axis
+    r = math.pi * rotation[0] / 180.
+    cx = tf.math.cos(r)
+    sx = tf.math.sin(r)
+    rx = get_4x4_mat([one,  zero, zero, zero,
+                      zero, cx, -sx, zero,
+                      zero, sx,  cx, zero,
+                      zero, zero, zero, one])
+
+    # Y axis
+    r = math.pi * rotation[1] / 180.
+    cy = tf.math.cos(r)
+    sy = tf.math.sin(r)
+    ry = get_4x4_mat([cy,  zero, sy, zero,
+                      zero, one, zero, zero,
+                      -sy, zero,  cy, zero,
+                      zero, zero, zero, one])
+
+    # Z axis
+    r = math.pi * rotation[2] / 180.
+    cz = tf.math.cos(r)
+    sz = tf.math.sin(r)
+    rz = get_4x4_mat([cz, -sz, zero, zero,
+                      sz, cz, zero, zero,
+                      zero, zero,  one, zero,
+                      zero, zero, zero, one])
+
+    rotation_matrix = np.random.choice([rx, ry, rz])
+
     # SHEAR MATRIX
+    shear = math.pi * shear / 180.
     c2 = tf.math.cos(shear)
     s2 = tf.math.sin(shear)
 
@@ -52,41 +103,55 @@ def get_mat3d(rotation=180.0, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0,  x_
                                 zero, zero, one, z_shift,
                                 zero, zero, zero, one])
 
-    return K.dot(zoom_matrix, shift_matrix)
+    return K.dot(rotation_matrix,
+                 K.dot(zoom_matrix, shift_matrix))
 
-def transform3d(image, dimension, rotate=180.0, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0,  x_shift=8.0, y_shift=8.0, z_shift=8.0, prob=0.5):
-    """ transforms an image by rotating, zooming a shearing
-
-    Input:
-        image: image of size [dim,dim,dim,3] not a batch of [b,dim,dim,dim,3]
-        dimension: image dimension
-        rotation: degrees to rotate
-        shear: degrees to shear
-        height_zoom: height zoom ratio
-        width_zoom: width zoom ratio
-        height_shift: height shift ratio
-        width_shift: width shift ratio
-        prob: probability to perform transformation
-
-    Output:
-        image randomly rotated, sheared, zoomed, and shifted
+def transform3d(object, dimension, rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0, x_shift=8.0, y_shift=8.0, z_shift=8.0, prob=0.5):
     """
+    Rotates, shears, zooms and shift an single object, not a batch of them.
+
+    Parameters
+    ----------
+    image : tf.Tensor of shape [h,w,d,c]
+        A single image to be transformed
+    dimension : int
+        Dimension in pixels of the squared image
+    rotation : float
+        Degrees to rotate
+    shear : float
+        Degrees to shear
+    height_zoom : float
+        height zoom ratio
+    width_zoom : float
+        width zoom ratio
+    height_shift : float
+        height shift ratio
+    width_shift : float
+        width shift ratio
+
+    Returns
+    -------
+    tf.Tensor
+        A transformed object
+    """
+
+    rotation = _check_rotation_arg(rotation)
 
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if P == 0:
-        return image  # no action
+        return object  # no action
 
     DIM = dimension
     XDIM = DIM % 2
 
-    rot = rotate * tf.random.normal([1], dtype='float32')
+    rot = rotation * tf.random.normal([3], dtype='float32')
     shr = shear * tf.random.normal([1], dtype='float32')
     x_zoom = 1.0 + tf.random.normal([1], dtype='float32') / x_zoom
     y_zoom = 1.0 + tf.random.normal([1], dtype='float32') / y_zoom
     z_zoom = 1.0 + tf.random.normal([1], dtype='float32') / z_zoom
     x_shift = x_shift * tf.random.normal([1], dtype='float32')
     y_shift = y_shift * tf.random.normal([1], dtype='float32')
-    z_shift = y_shift * tf.random.normal([1], dtype='float32')
+    z_shift = z_shift * tf.random.normal([1], dtype='float32')
 
     # GET TRANSFORMATION MATRIX
     m = get_mat3d(rot, shr, x_zoom, y_zoom, z_zoom, x_shift, y_shift, z_shift)
@@ -104,23 +169,33 @@ def transform3d(image, dimension, rotate=180.0, shear=2.0, x_zoom=8.0, y_zoom=8.
 
     # FIND ORIGIN PIXEL VALUES
     idx3 = tf.stack([DIM // 2 - idx2[0,], DIM // 2 - 1 + idx2[1,]])
-    d = tf.gather_nd(image, tf.transpose(idx3))
+    d = tf.gather_nd(object, tf.transpose(idx3))
 
     return tf.reshape(d, [DIM, DIM, DIM, 3])
 
 def get_mat2d(rotation=180.0, shear=2.0, height_zoom=8.0, width_zoom=8.0, height_shift=8.0, width_shift=8.0):
-    """Creates a transformation matrix which rotates, shears, zooms and shift an image.
+    """
+    Creates a transformation matrix which rotates, shears, zooms and shift an 2D image.
 
-    Inputs:
-        rotation: degrees to rotate
-        shear: degrees to shear
-        height_zoom: height zoom ratio
-        width_zoom: width zoom ratio
-        height_shift: height shift ratio
-        width_shift: width shift ratio
+    Parameters
+    ----------
+    rotation : float
+        Degrees to rotate
+    shear : float
+        Degrees to shear
+    height_zoom : float
+        height zoom ratio
+    width_zoom : float
+        width zoom ratio
+    height_shift : float
+        height shift ratio
+    width_shift : float
+        width shift ratio
 
-    Outputs:
-        3 x3 transformation matrix
+    Returns
+    -------
+    tf.tensor
+        3x3 transformation matrix
     """
 
     # CONVERT DEGREES TO RADIANS
@@ -159,22 +234,33 @@ def get_mat2d(rotation=180.0, shear=2.0, height_zoom=8.0, width_zoom=8.0, height
                  K.dot(zoom_matrix, shift_matrix))
 
 
-def transform(image, dimension, rotate=180.0, shear=2.0, hzoom=8.0, vzoom=8.0, hshift=8.0, wshift=8.0, prob=0.5):
-    """ transforms an image by rotating, zooming a shearing
+def transform2d(image, dimension, rotate=180.0, shear=2.0, hzoom=8.0, vzoom=8.0, hshift=8.0, wshift=8.0, prob=0.5):
+    """
+    Rotates, shears, zooms and shift an single image, not a batch of them.
 
-    Input:
-        image: image of size [dim,dim,3] not a batch of [b,dim,dim,3]
-        dimension: image dimension
-        rotation: degrees to rotate
-        shear: degrees to shear
-        height_zoom: height zoom ratio
-        width_zoom: width zoom ratio
-        height_shift: height shift ratio
-        width_shift: width shift ratio
-        prob: probability to perform transformation
+    Parameters
+    ----------
+    image : tf.Tensor of shape [h,w,c]
+        A single image to be transformed
+    dimension : int
+        Dimension in pixels of the squared image
+    rotation : float
+        Degrees to rotate
+    shear : float
+        Degrees to shear
+    height_zoom : float
+        height zoom ratio
+    width_zoom : float
+        width zoom ratio
+    height_shift : float
+        height shift ratio
+    width_shift : float
+        width shift ratio
 
-    Output:
-        image randomly rotated, sheared, zoomed, and shifted
+    Returns
+    -------
+    tf.Tensor
+        A transformed image
     """
 
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
@@ -212,17 +298,23 @@ def transform(image, dimension, rotate=180.0, shear=2.0, hzoom=8.0, vzoom=8.0, h
     return tf.reshape(d, [DIM, DIM, 3])
 
 
-def dropout(image, height=256, width=256, prob=0.75, ct=8, sz=0.2):
-    """ Coarse dropout randomly remove squares from training images
+def dropout(image, prob=0.75, ct=8, sz=0.2):
+    """
+    Coarse dropout randomly remove squares from training images
 
-    Input:
-        image: image of size [height,width,3] not a batch of [b,dim,dim,3]
-        dimension: image dimension
-        prob: probability to perform dropout
-        ct: number of squares to remove
-        sz: size of square (in % of the image dimension)
+    Parameters
+    ----------
+    image : tf.Tensor
+        image of size [height,width,3] not a batch of [b,dim,dim,3]
+    prob : float
+        probability to perform dropout
+    ct : int
+        number of squares to remove
+    sz : size
+        size of square (in % of the image dimension)
 
-    Output:
+    Returns
+    -------
         image with ct squares of side size sz*dimension removed
     """
 
@@ -231,28 +323,30 @@ def dropout(image, height=256, width=256, prob=0.75, ct=8, sz=0.2):
     if (P == 0) | (ct == 0) | (sz == 0):
         return image # no action
 
-    sq_height = tf.cast(sz * height, tf.int32) * P
-    sq_width = tf.cast(sz * width, tf.int32) * P
+    h, w, c = image.shape
+
+    sq_height = tf.cast(sz * h, tf.int32) * P
+    sq_width = tf.cast(sz * w, tf.int32) * P
 
     # generate random black squares
     for k in range(ct):
         # CHOOSE RANDOM LOCATION
-        x = tf.cast(tf.random.uniform([], 0, width), tf.int32)
-        y = tf.cast(tf.random.uniform([], 0, height), tf.int32)
+        x = tf.cast(tf.random.uniform([], 0, w), tf.int32)
+        y = tf.cast(tf.random.uniform([], 0, h), tf.int32)
         # COMPUTE SQUARE
         ya = tf.math.maximum(0, y - sq_height // 2)
-        yb = tf.math.minimum(height, y + sq_height // 2)
+        yb = tf.math.minimum(h, y + sq_height // 2)
         xa = tf.math.maximum(0, x - sq_width // 2)
-        xb = tf.math.minimum(width, x + sq_width // 2)
+        xb = tf.math.minimum(w, x + sq_width // 2)
         # DROPOUT IMAGE
         one = image[ya:yb, 0:xa, :]
         two = tf.zeros([yb - ya, xb - xa, 3])
-        three = image[ya:yb, xb:width, :]
+        three = image[ya:yb, xb:w, :]
         middle = tf.concat([one, two, three], axis=1)
-        image = tf.concat([image[0:ya, :, :], middle, image[yb:height, :, :]], axis=0)
+        image = tf.concat([image[0:ya, :, :], middle, image[yb:h, :, :]], axis=0)
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR
-    image = tf.reshape(image, [height, width, 3])
+    image = tf.reshape(image, [h, w, 3])
     return image
 
 def mixup_labels(label1, label2, n_classes, a):
@@ -264,6 +358,7 @@ def mixup_labels(label1, label2, n_classes, a):
         lab2 = label2
     return (1 - a) * lab1 + a * lab2
 
+
 def cutmix(image, label, batch_size=16, dimension=256, n_classes = 1, prob=1.0):
     # input image - is a batch of images of size [n,dim,dim,3] not a single image of [dim,dim,3]
     # output - a batch of images with cutmix applied
@@ -273,7 +368,7 @@ def cutmix(image, label, batch_size=16, dimension=256, n_classes = 1, prob=1.0):
 
     DIM = dimension
 
-    imgs = [];
+    imgs = []
     labs = []
     for j in range(batch_size):
         # DO CUTMIX WITH PROBABILITY DEFINED ABOVE
@@ -376,6 +471,23 @@ def spec_augmentation(image, prob=0.66, time_drop_width=0.0625, time_stripes_num
 
 
 def add_white_noise(image, prob=0.3, std=0.2):
+    """
+    Add white noise to object or image
+
+    Parameters
+    ----------
+    image : tf.Tensor
+        image of size [height,width,3] not a batch of [b,dim,dim,3]
+    prob : float
+        probability to perform dropout
+    std : size
+        Number of standard deviations to calculate noise with
+
+    Returns
+    -------
+    tf.Tensor
+        input image or object with added white noise
+    """
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if (P == 0):
         return image  # no action
@@ -384,7 +496,7 @@ def add_white_noise(image, prob=0.3, std=0.2):
 
     noise = tf.random.normal(shape=image.shape, mean=tf.reduce_mean(image), stddev=tf.math.reduce_std(image) * std)
     image = image + noise
-    image = tf.reshape(image, [h, w, c])
+    image = tf.reshape(image, image.shape)
     return image
 
 
