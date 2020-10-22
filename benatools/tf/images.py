@@ -302,8 +302,30 @@ def transform2d(image, dimension, rotate=180.0, shear=2.0, hzoom=8.0, vzoom=8.0,
 
     return tf.reshape(d, [DIM, DIM, 3])
 
+def _reconstruct2D(a, b, xa, xb, ya, yb):
+    one = a[ya:yb, :xa, :]
+    two = b[ya:yb, xa:xb, :]
+    three = a[ya:yb, xb:, :]
+    middle = tf.concat([one, two, three], axis=1)
+    return tf.concat([a[:ya, :, :], middle, a[yb:, :, :]], axis=0)
 
-def dropout(image, prob=0.75, ct=8, sz=0.2):
+def _reconstruct3D(a, b, xa, xb, ya, yb, za, zb):
+    one = a[ya:yb, :xa, :, :]
+    twoA = a[ya:yb, xa:xb, :za, :]
+    two = b[ya:yb, xa:xb, za:zb, :]
+    twoB = a[ya:yb, xa:xb, zb:, :]
+    three = a[ya:yb, xb:, :, :]
+    two = tf.concat([twoA, two, twoB], axis=2)
+    middle = tf.concat([one, two, three], axis=1)
+    return tf.concat([a[:ya, :, :, :], middle, a[yb:, :, :, :]], axis=0)
+
+
+def _points(dim, location, size):
+    a = tf.math.maximum(0, location - size // 2)
+    b = tf.math.minimum(dim, location + size // 2)
+    return a, b
+
+def dropout(image, prob=0.75, ct=8, sz=0.2, rank=2):
     """
     Coarse dropout randomly remove squares from training images
 
@@ -317,133 +339,206 @@ def dropout(image, prob=0.75, ct=8, sz=0.2):
         number of squares to remove
     sz : size
         size of square (in % of the image dimension)
+    rank : int
+        values must be 2 (image) or 3 (3d shape)
 
     Returns
     -------
         image with ct squares of side size sz*dimension removed
     """
 
+    if (rank != 2) & (rank != 3):
+        raise Exception('Rank must be 2 or 3')
+
     # DO DROPOUT WITH PROBABILITY DEFINED ABOVE
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if (P == 0) | (ct == 0) | (sz == 0):
         return image # no action
 
-    h, w, c = image.shape
+    # Extract dimension
+    if rank==2:
+        h, w, c = image.shape
+    else:
+        h, w, d, c = image.shape
 
+    # Calculate square/box size
     sq_height = tf.cast(sz * h, tf.int32) * P
     sq_width = tf.cast(sz * w, tf.int32) * P
+    print(sq_height, sq_width)
+
+    if rank == 3:
+        sq_depth = tf.cast(sz * d, tf.int32) * P
+        print(sq_depth)
 
     # generate random black squares
     for k in range(ct):
-        # CHOOSE RANDOM LOCATION
+        # Choose random location
         x = tf.cast(tf.random.uniform([], 0, w), tf.int32)
         y = tf.cast(tf.random.uniform([], 0, h), tf.int32)
-        # COMPUTE SQUARE
-        ya = tf.math.maximum(0, y - sq_height // 2)
-        yb = tf.math.minimum(h, y + sq_height // 2)
-        xa = tf.math.maximum(0, x - sq_width // 2)
-        xb = tf.math.minimum(w, x + sq_width // 2)
-        # DROPOUT IMAGE
-        one = image[ya:yb, 0:xa, :]
-        two = tf.zeros([yb - ya, xb - xa, 3])
-        three = image[ya:yb, xb:w, :]
-        middle = tf.concat([one, two, three], axis=1)
-        image = tf.concat([image[0:ya, :, :], middle, image[yb:h, :, :]], axis=0)
 
-    # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR
-    image = tf.reshape(image, [h, w, 3])
+        # Compute square / cube
+        ya, yb = _points(h, y, sq_height)
+        xa, xb = _points(w, x, sq_width)
+
+        # Include third dimension for 3D
+        if rank==3:
+            z = tf.cast(tf.random.uniform([], 0, d), tf.int32)
+            za, zb = _points(h, z, sq_depth)
+
+        # Dropout Image
+        if rank == 2:
+            image = _reconstruct2D(image, tf.zeros_like(image), xa, xb, ya, yb)
+        else:
+            image = _reconstruct3D(image, tf.zeros_like(image), xa, xb, ya, yb, za, zb)
+
+    # Reshape hack so TPU compiler knows shape of output tensor
+    if rank == 2:
+        image = tf.reshape(image, [h, w, 3])
+    else:
+        image = tf.reshape(image, [h, w, d, 3])
+
     return image
 
-def mixup_labels(label1, label2, n_classes, a):
-    if len(label1.shape) == 1:
+def _mixup_labels(shape, label1, label2, n_classes, a):
+    if len(shape) == 1:
         lab1 = tf.one_hot(label1, n_classes)
         lab2 = tf.one_hot(label2, n_classes)
     else:
-        lab1 = label1
-        lab2 = label2
+        lab1 = tf.cast(label1, dtype=tf.float32)
+        lab2 = tf.cast(label2, dtype=tf.float32)
     return (1 - a) * lab1 + a * lab2
 
 
-def cutmix(image, label, batch_size=16, dimension=256, n_classes = 1, prob=1.0):
-    # input image - is a batch of images of size [n,dim,dim,3] not a single image of [dim,dim,3]
-    # output - a batch of images with cutmix applied
+def cutmix(batch, label, prob=1.0, dimension=256, n_classes = 1):
+    """
+    Cutmix randomly remove squares from training images
+
+    Parameters
+    ----------
+    batch : tf.Tensor
+        batch of [b,dim,dim,3] or [b,dim,dim,dim,3]
+    label : tf.tensor
+        batch of shape [b,] if labels are integer, or [b,n_classes] if format is one-hot
+    prob : float
+        probability to perform dropout
+    batch_size : int
+        batch size
+    dimension : int
+        dimension of the data
+    n_classes : int
+        number of classes
+    rank : int
+        values must be 2 (image) or 3 (3d shape)
+
+    Returns
+    -------
+    tf.Tensor
+        A batch of images with Cutmix applied
+    """
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if (P == 0):
-        return image  # no action
+        return batch  # no action
 
     DIM = dimension
+    rank = len(batch.shape)-2
 
     imgs = []
     labs = []
     for j in range(batch_size):
         # DO CUTMIX WITH PROBABILITY DEFINED ABOVE
         P = tf.cast(tf.random.uniform([], 0, 1) <= prob, tf.int32)
-        # CHOOSE RANDOM IMAGE TO CUTMIX WITH
-        k = tf.cast(tf.random.uniform([], 0, batch_size), tf.int32)
-        # CHOOSE RANDOM LOCATION
-        x = tf.cast(tf.random.uniform([], 0, DIM), tf.int32)
-        y = tf.cast(tf.random.uniform([], 0, DIM), tf.int32)
+
         b = tf.random.uniform([], 0, 1)  # this is beta dist with alpha=1.0
         WIDTH = tf.cast(DIM * tf.math.sqrt(1 - b), tf.int32) * P
-        ya = tf.math.maximum(0, y - WIDTH // 2)
-        yb = tf.math.minimum(DIM, y + WIDTH // 2)
-        xa = tf.math.maximum(0, x - WIDTH // 2)
-        xb = tf.math.minimum(DIM, x + WIDTH // 2)
-        # MAKE CUTMIX IMAGE
-        one = image[j, ya:yb, 0:xa, :]
-        two = image[k, ya:yb, xa:xb, :]
-        three = image[j, ya:yb, xb:DIM, :]
-        middle = tf.concat([one, two, three], axis=1)
-        img = tf.concat([image[j, 0:ya, :, :], middle, image[j, yb:DIM, :, :]], axis=0)
-        imgs.append(img)
-        # MAKE CUTMIX LABEL
-        a = tf.cast(WIDTH * WIDTH / DIM / DIM, tf.float32)
-        if len(label.shape) == 1:
-            lab1 = tf.one_hot(label[j], n_classes)
-            lab2 = tf.one_hot(label[k], n_classes)
+
+        # Choose random location
+        x = tf.cast(tf.random.uniform([], 0, DIM), tf.int32)
+        y = tf.cast(tf.random.uniform([], 0, DIM), tf.int32)
+
+        # Compute square / cube
+        ya, yb = _points(DIM, y, WIDTH)
+        xa, xb = _points(DIM, x, WIDTH)
+
+        # Include third dimension for 3D
+        if rank==3:
+            z = tf.cast(tf.random.uniform([], 0, DIM), tf.int32)
+            za, zb = _points(DIM, z, WIDTH)
+
+        # Choose Random Image to Cutmix with
+        k = tf.cast(tf.random.uniform([], 0, batch_size), tf.int32)
+
+        # Make Cutmix Image
+        if rank == 2:
+            image = _reconstruct2D(batch[j], batch[k], xa, xb, ya, yb)
         else:
-            lab1 = label[j,]
-            lab2 = label[k,]
-        labs.append((1 - a) * lab1 + a * lab2)
+            image = _reconstruct3D(batch[j], batch[k], xa, xb, ya, yb, za, zb)
+        imgs.append(image)
+
+        # Make Cutmix Label
+        a = tf.cast((WIDTH ** rank) / (DIM ** rank), tf.float32)
+        labs.append(_mixup_labels(label.shape, label[j], label[k], n_classes, a))
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR (maybe use Python typing instead?)
-    image2 = tf.reshape(tf.stack(imgs),(batch_size, DIM, DIM, 3))
-    label2 = tf.reshape(tf.stack(labs),(batch_size, n_classes))
-    return image2,label2
+    if rank == 2:
+        image2 = tf.reshape(tf.stack(imgs),(batch_size, DIM, DIM, 3))
+    else:
+        image2 = tf.reshape(tf.stack(imgs),(batch_size, DIM, DIM, DIM, 3))
 
-def mixup(image, label, batch_size=16, dimension=256, n_classes=1, prob=1.0):
-    # input image - is a batch of images of size [n,dim,dim,3] not a single image of [dim,dim,3]
-    # output - a batch of images with mixup applied
+    label2 = tf.reshape(tf.stack(labs),(batch_size, n_classes))
+    return image2, label2
+
+def mixup(batch, label, prob=1.0, dimension=256, n_classes=1):
+    """
+    Mixup randomly mixes data from two samples
+
+    Parameters
+    ----------
+    batch : tf.Tensor
+        batch of [b,dim,dim,3] or [b,dim,dim,dim,3]
+    label : tf.tensor
+        batch of shape [b,] if labels are integer, or [b,n_classes] if format is one-hot
+    prob : float
+        probability to perform dropout
+    batch_size : int
+        batch size
+    dimension : int
+        dimension of the data
+    n_classes : int
+        number of classes
+    rank : int
+        values must be 2 (image) or 3 (3d shape)
+
+    Returns
+    -------
+    tf.Tensor
+        A batch of images with Mixup applied
+    """
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if (P == 0):
-        return image  # no action
+        return batch  # no action
 
     DIM = dimension
     CLASSES = n_classes
+    rank = len(batch.shape)-2
 
     imgs = []
     labs = []
-    for j in range(batch_size):
+    for j in range(batch.shape[0]):
         # DO MIXUP WITH PROBABILITY DEFINED ABOVE
         P = tf.cast(tf.random.uniform([], 0, 1) <= prob, tf.float32)
-        # CHOOSE RANDOM
+        # Choose Random
         k = tf.cast(tf.random.uniform([], 0, batch_size), tf.int32)
         a = tf.random.uniform([], 0, 1) * P  # this is beta dist with alpha=1.0
-        # MAKE MIXUP IMAGE
-        img1 = image[j,]
-        img2 = image[k,]
+        # Make mixup image
+        img1 = batch[j,]
+        img2 = batch[k,]
         imgs.append((1 - a) * img1 + a * img2)
-        # MAKE CUTMIX LABEL
-        if len(label.shape) == 1:
-            lab1 = tf.one_hot(label[j], CLASSES)
-            lab2 = tf.one_hot(label[k], CLASSES)
-        else:
-            lab1 = label[j,]
-            lab2 = label[k,]
-        labs.append((1 - a) * lab1 + a * lab2)
+
+        # Make Cutmix Label
+        labs.append(_mixup_labels(label.shape, label[j], label[k], n_classes, a))
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR (maybe use Python typing instead?)
-    image2 = tf.reshape(tf.stack(imgs), (batch_size, DIM, DIM, 3))
+    image2 = tf.reshape(tf.stack(imgs), (batch_size, DIM, DIM, 3)) if rank == 2 else tf.reshape(tf.stack(imgs), (batch_size, DIM, DIM, DIM, 3))
     label2 = tf.reshape(tf.stack(labs), (batch_size, CLASSES))
     return image2, label2
 
