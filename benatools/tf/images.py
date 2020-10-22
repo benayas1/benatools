@@ -4,6 +4,7 @@ import tensorflow.keras.backend as K
 import numpy as np
 import collections
 
+
 def _check_rotation_arg(x):
     """ Returns a list of rotation args"""
     if x is None:
@@ -82,7 +83,14 @@ def get_mat3d(rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0, x_sh
                       zero, zero, one, zero,
                       zero, zero, zero, one])
 
-    rotation_matrix = [rx, ry, rz][tf.random.uniform([], minval=0, maxval=3, dtype=tf.int32)]
+    rand = tf.random.uniform([], minval=0, maxval=3, dtype=tf.int32)
+    if rand == 0:
+        rotation_matrix = rx
+    else:
+        if rand == 1:
+            rotation_matrix = ry
+        else:
+            rotation_matrix = rz
 
     # SHEAR MATRIX
     shear = math.pi * shear / 180.
@@ -118,18 +126,24 @@ def transform3d(obj, dimension, rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0
         A single image to be transformed
     dimension : int
         Dimension in pixels of the squared image
-    rotation : float
+    rotation : float or list of floats
         Degrees to rotate
     shear : float
         Degrees to shear
-    height_zoom : float
+    x_zoom : float
         height zoom ratio
-    width_zoom : float
+    y_zoom : float
         width zoom ratio
-    height_shift : float
+    z_zoom : float
+        width zoom ratio
+    x_shift : float
         height shift ratio
-    width_shift : float
+    y_shift : float
         width shift ratio
+    z_shift : float
+        width shift ratio
+    prob : float
+        probabilities to apply transformations
 
     Returns
     -------
@@ -141,7 +155,7 @@ def transform3d(obj, dimension, rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0
 
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if P == 0:
-        return object  # no action
+        return obj  # no action
 
     DIM = dimension
     XDIM = DIM % 2
@@ -177,6 +191,7 @@ def transform3d(obj, dimension, rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0
     d = tf.gather_nd(obj, tf.transpose(idx3))
 
     return tf.reshape(d, [DIM, DIM, DIM, 3])
+
 
 def get_mat2d(rotation=180.0, shear=2.0, height_zoom=8.0, width_zoom=8.0, height_shift=8.0, width_shift=8.0):
     """
@@ -239,7 +254,7 @@ def get_mat2d(rotation=180.0, shear=2.0, height_zoom=8.0, width_zoom=8.0, height
                  K.dot(zoom_matrix, shift_matrix))
 
 
-def transform2d(image, dimension, rotate=180.0, shear=2.0, hzoom=8.0, vzoom=8.0, hshift=8.0, wshift=8.0, prob=0.5):
+def transform2d(image, dimension, rotation=180.0, shear=2.0, hzoom=8.0, wzoom=8.0, hshift=8.0, wshift=8.0, prob=0.5):
     """
     Rotates, shears, zooms and shift an single image, not a batch of them.
 
@@ -253,14 +268,16 @@ def transform2d(image, dimension, rotate=180.0, shear=2.0, hzoom=8.0, vzoom=8.0,
         Degrees to rotate
     shear : float
         Degrees to shear
-    height_zoom : float
+    hzoom : float
         height zoom ratio
-    width_zoom : float
+    wzoom : float
         width zoom ratio
-    height_shift : float
+    hshift : float
         height shift ratio
-    width_shift : float
+    wshift : float
         width shift ratio
+    prob : float
+        probabilities to apply transformations
 
     Returns
     -------
@@ -275,10 +292,10 @@ def transform2d(image, dimension, rotate=180.0, shear=2.0, hzoom=8.0, vzoom=8.0,
     DIM = dimension
     XDIM = DIM % 2  # fix for size 331
 
-    rot = rotate * tf.random.normal([1], dtype='float32')
+    rot = rotation * tf.random.normal([1], dtype='float32')
     shr = shear * tf.random.normal([1], dtype='float32')
     h_zoom = 1.0 + tf.random.normal([1], dtype='float32') / hzoom
-    w_zoom = 1.0 + tf.random.normal([1], dtype='float32') / vzoom
+    w_zoom = 1.0 + tf.random.normal([1], dtype='float32') / wzoom
     h_shift = hshift * tf.random.normal([1], dtype='float32')
     w_shift = wshift * tf.random.normal([1], dtype='float32')
 
@@ -302,12 +319,14 @@ def transform2d(image, dimension, rotate=180.0, shear=2.0, hzoom=8.0, vzoom=8.0,
 
     return tf.reshape(d, [DIM, DIM, 3])
 
+
 def _reconstruct2D(a, b, xa, xb, ya, yb):
     one = a[ya:yb, :xa, :]
     two = b[ya:yb, xa:xb, :]
     three = a[ya:yb, xb:, :]
     middle = tf.concat([one, two, three], axis=1)
     return tf.concat([a[:ya, :, :], middle, a[yb:, :, :]], axis=0)
+
 
 def _reconstruct3D(a, b, xa, xb, ya, yb, za, zb):
     one = a[ya:yb, :xa, :, :]
@@ -324,6 +343,7 @@ def _points(dim, location, size):
     a = tf.math.maximum(0, location - size // 2)
     b = tf.math.minimum(dim, location + size // 2)
     return a, b
+
 
 def dropout(image, prob=0.75, ct=8, sz=0.2, rank=2):
     """
@@ -353,10 +373,10 @@ def dropout(image, prob=0.75, ct=8, sz=0.2, rank=2):
     # DO DROPOUT WITH PROBABILITY DEFINED ABOVE
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if (P == 0) | (ct == 0) | (sz == 0):
-        return image # no action
+        return image  # no action
 
     # Extract dimension
-    if rank==2:
+    if rank == 2:
         h, w, c = image.shape
     else:
         h, w, d, c = image.shape
@@ -364,11 +384,9 @@ def dropout(image, prob=0.75, ct=8, sz=0.2, rank=2):
     # Calculate square/box size
     sq_height = tf.cast(sz * h, tf.int32) * P
     sq_width = tf.cast(sz * w, tf.int32) * P
-    print(sq_height, sq_width)
 
     if rank == 3:
         sq_depth = tf.cast(sz * d, tf.int32) * P
-        print(sq_depth)
 
     # generate random black squares
     for k in range(ct):
@@ -381,7 +399,7 @@ def dropout(image, prob=0.75, ct=8, sz=0.2, rank=2):
         xa, xb = _points(w, x, sq_width)
 
         # Include third dimension for 3D
-        if rank==3:
+        if rank == 3:
             z = tf.cast(tf.random.uniform([], 0, d), tf.int32)
             za, zb = _points(h, z, sq_depth)
 
@@ -399,6 +417,7 @@ def dropout(image, prob=0.75, ct=8, sz=0.2, rank=2):
 
     return image
 
+
 def _mixup_labels(shape, label1, label2, n_classes, a):
     if len(shape) == 1:
         lab1 = tf.one_hot(label1, n_classes)
@@ -409,7 +428,7 @@ def _mixup_labels(shape, label1, label2, n_classes, a):
     return (1 - a) * lab1 + a * lab2
 
 
-def cutmix(batch, label, prob=1.0, dimension=256, n_classes = 1):
+def cutmix(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
     """
     Cutmix randomly remove squares from training images
 
@@ -435,12 +454,10 @@ def cutmix(batch, label, prob=1.0, dimension=256, n_classes = 1):
     tf.Tensor
         A batch of images with Cutmix applied
     """
-    P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
-    if (P == 0):
-        return batch  # no action
 
     DIM = dimension
-    rank = len(batch.shape)-2
+    rank = len(batch.shape) - 2
+    batch_size = batch.shape[0]
 
     imgs = []
     labs = []
@@ -460,7 +477,7 @@ def cutmix(batch, label, prob=1.0, dimension=256, n_classes = 1):
         xa, xb = _points(DIM, x, WIDTH)
 
         # Include third dimension for 3D
-        if rank==3:
+        if rank == 3:
             z = tf.cast(tf.random.uniform([], 0, DIM), tf.int32)
             za, zb = _points(DIM, z, WIDTH)
 
@@ -480,14 +497,18 @@ def cutmix(batch, label, prob=1.0, dimension=256, n_classes = 1):
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR (maybe use Python typing instead?)
     if rank == 2:
-        image2 = tf.reshape(tf.stack(imgs),(batch_size, DIM, DIM, 3))
+        image2 = tf.reshape(tf.stack(imgs), (batch_size, DIM, DIM, 3))
     else:
-        image2 = tf.reshape(tf.stack(imgs),(batch_size, DIM, DIM, DIM, 3))
+        image2 = tf.reshape(tf.stack(imgs), (batch_size, DIM, DIM, DIM, 3))
 
-    label2 = tf.reshape(tf.stack(labs),(batch_size, n_classes))
+    if n_labels:
+        label2 = tf.reshape(tf.stack(labs), (batch_size, n_labels))
+    else:
+        label2 = tf.reshape(tf.stack(labs), (batch_size, n_classes))
     return image2, label2
 
-def mixup(batch, label, prob=1.0, dimension=256, n_classes=1):
+
+def mixup(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
     """
     Mixup randomly mixes data from two samples
 
@@ -513,17 +534,15 @@ def mixup(batch, label, prob=1.0, dimension=256, n_classes=1):
     tf.Tensor
         A batch of images with Mixup applied
     """
-    P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
-    if (P == 0):
-        return batch  # no action
 
     DIM = dimension
     CLASSES = n_classes
-    rank = len(batch.shape)-2
+    rank = len(batch.shape) - 2
+    batch_size = batch.shape[0]
 
     imgs = []
     labs = []
-    for j in range(batch.shape[0]):
+    for j in range(batch_size):
         # DO MIXUP WITH PROBABILITY DEFINED ABOVE
         P = tf.cast(tf.random.uniform([], 0, 1) <= prob, tf.float32)
         # Choose Random
@@ -538,8 +557,13 @@ def mixup(batch, label, prob=1.0, dimension=256, n_classes=1):
         labs.append(_mixup_labels(label.shape, label[j], label[k], n_classes, a))
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR (maybe use Python typing instead?)
-    image2 = tf.reshape(tf.stack(imgs), (batch_size, DIM, DIM, 3)) if rank == 2 else tf.reshape(tf.stack(imgs), (batch_size, DIM, DIM, DIM, 3))
-    label2 = tf.reshape(tf.stack(labs), (batch_size, CLASSES))
+    image2 = tf.reshape(tf.stack(imgs), (batch_size, DIM, DIM, 3)) if rank == 2 else tf.reshape(tf.stack(imgs), (
+    batch_size, DIM, DIM, DIM, 3))
+
+    if n_labels:
+        label2 = tf.reshape(tf.stack(labs), (batch_size, n_labels))
+    else:
+        label2 = tf.reshape(tf.stack(labs), (batch_size, n_classes))
     return image2, label2
 
 
