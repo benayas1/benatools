@@ -43,7 +43,7 @@ def get_mat3d(rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0, z_zoom=8.0, x_sh
     Returns
     -------
     tf.tensor
-        3x3 transformation matrix
+        4x4 transformation matrix for 3D transformations
     """
 
     # CONVERT DEGREES TO RADIANS
@@ -151,14 +151,14 @@ def transform3d(obj, dimension, rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0
         A transformed object
     """
 
-    rotation = _check_rotation_arg(rotation)
+    XDIM = dimension % 2
 
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if P == 0:
-        return obj  # no action
+        return tf.reshape(obj, [dimension, dimension, dimension, 3])  # no action
 
-    DIM = dimension
-    XDIM = DIM % 2
+    rotation = _check_rotation_arg(rotation)
+
 
     rot = rotation * tf.random.normal([3], dtype='float32')
     shr = shear * tf.random.normal([1], dtype='float32')
@@ -175,22 +175,22 @@ def transform3d(obj, dimension, rotation=None, shear=2.0, x_zoom=8.0, y_zoom=8.0
     m = get_mat3d(rot, shr, x_zoom, y_zoom, z_zoom, x_shift, y_shift, z_shift)
 
     # LIST DESTINATION PIXEL INDICES
-    x = tf.repeat(tf.range(DIM // 2, -DIM // 2, -1), DIM * DIM)
-    y = tf.tile(tf.repeat(tf.range(DIM // 2, -DIM // 2, -1), DIM), [DIM])
-    z = tf.tile(tf.range(-DIM // 2, DIM // 2), [DIM * DIM])
-    c = tf.ones([DIM * DIM * DIM], dtype='int32')
+    x = tf.repeat(tf.range(dimension // 2, -dimension // 2, -1), dimension * dimension)
+    y = tf.tile(tf.repeat(tf.range(dimension // 2, -dimension // 2, -1), dimension), [dimension])
+    z = tf.tile(tf.range(-dimension // 2, dimension // 2), [dimension * dimension])
+    c = tf.ones([dimension * dimension * dimension], dtype='int32')
     idx = tf.stack([x, y, z, c])
 
     # ROTATE DESTINATION PIXELS ONTO ORIGIN PIXELS
     idx2 = K.dot(m, tf.cast(idx, dtype='float32'))
     idx2 = K.cast(idx2, dtype='int32')
-    idx2 = K.clip(idx2, -DIM // 2 + XDIM + 1, DIM // 2)
+    idx2 = K.clip(idx2, -dimension // 2 + XDIM + 1, dimension // 2)
 
     # FIND ORIGIN PIXEL VALUES
-    idx3 = tf.stack([DIM // 2 - idx2[0,], DIM // 2 - idx2[1,], DIM // 2 - 1 + idx2[2,]])
+    idx3 = tf.stack([dimension // 2 - idx2[0,], dimension // 2 - idx2[1,], dimension // 2 - 1 + idx2[2,]])
     d = tf.gather_nd(obj, tf.transpose(idx3))
 
-    return tf.reshape(d, [DIM, DIM, DIM, 3])
+    return tf.reshape(d, [dimension, dimension, dimension, 3])
 
 
 def get_mat2d(rotation=180.0, shear=2.0, height_zoom=8.0, width_zoom=8.0, height_shift=8.0, width_shift=8.0):
@@ -214,8 +214,8 @@ def get_mat2d(rotation=180.0, shear=2.0, height_zoom=8.0, width_zoom=8.0, height
 
     Returns
     -------
-    tf.tensor
-        3x3 transformation matrix
+    tf.Tensor
+        3x3 transformation matrix for 2D transformations
     """
 
     # CONVERT DEGREES TO RADIANS
@@ -285,12 +285,11 @@ def transform2d(image, dimension, rotation=180.0, shear=2.0, hzoom=8.0, wzoom=8.
         A transformed image
     """
 
+    XDIM = dimension % 2
+
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if P == 0:
-        return image  # no action
-
-    DIM = dimension
-    XDIM = DIM % 2  # fix for size 331
+        return tf.reshape(image, [dimension, dimension, 3])  # no action
 
     rot = rotation * tf.random.normal([1], dtype='float32')
     shr = shear * tf.random.normal([1], dtype='float32')
@@ -303,21 +302,21 @@ def transform2d(image, dimension, rotation=180.0, shear=2.0, hzoom=8.0, wzoom=8.
     m = get_mat2d(rot, shr, h_zoom, w_zoom, h_shift, w_shift)
 
     # LIST DESTINATION PIXEL INDICES
-    x = tf.repeat(tf.range(DIM // 2, -DIM // 2, -1), DIM)
-    y = tf.tile(tf.range(-DIM // 2, DIM // 2), [DIM])
-    z = tf.ones([DIM * DIM], dtype='int32')
+    x = tf.repeat(tf.range(dimension // 2, -dimension // 2, -1), dimension)
+    y = tf.tile(tf.range(-dimension // 2, dimension // 2), [dimension])
+    z = tf.ones([dimension * dimension], dtype='int32')
     idx = tf.stack([x, y, z])
 
     # ROTATE DESTINATION PIXELS ONTO ORIGIN PIXELS
     idx2 = K.dot(m, tf.cast(idx, dtype='float32'))
     idx2 = K.cast(idx2, dtype='int32')
-    idx2 = K.clip(idx2, -DIM // 2 + XDIM + 1, DIM // 2)
+    idx2 = K.clip(idx2, -dimension // 2 + XDIM + 1, dimension // 2)
 
     # FIND ORIGIN PIXEL VALUES
-    idx3 = tf.stack([DIM // 2 - idx2[0,], DIM // 2 - 1 + idx2[1,]])
+    idx3 = tf.stack([dimension // 2 - idx2[0,], dimension // 2 - 1 + idx2[1,]])
     d = tf.gather_nd(image, tf.transpose(idx3))
 
-    return tf.reshape(d, [DIM, DIM, 3])
+    return tf.reshape(d, [dimension, dimension, 3])
 
 
 def _reconstruct2D(a, b, xa, xb, ya, yb):
@@ -330,11 +329,11 @@ def _reconstruct2D(a, b, xa, xb, ya, yb):
 
 def _reconstruct3D(a, b, xa, xb, ya, yb, za, zb):
     one = a[ya:yb, :xa, :, :]
-    twoA = a[ya:yb, xa:xb, :za, :]
+    two_a = a[ya:yb, xa:xb, :za, :]
     two = b[ya:yb, xa:xb, za:zb, :]
-    twoB = a[ya:yb, xa:xb, zb:, :]
+    two_b = a[ya:yb, xa:xb, zb:, :]
     three = a[ya:yb, xb:, :, :]
-    two = tf.concat([twoA, two, twoB], axis=2)
+    two = tf.concat([two_a, two, two_b], axis=2)
     middle = tf.concat([one, two, three], axis=1)
     return tf.concat([a[:ya, :, :, :], middle, a[yb:, :, :, :]], axis=0)
 
@@ -370,9 +369,18 @@ def dropout(image, prob=0.75, ct=8, sz=0.2, rank=2):
     if (rank != 2) & (rank != 3):
         raise Exception('Rank must be 2 or 3')
 
+    if rank == 2:
+        h, w, c = image.shape
+    else:
+        h, w, d, c = image.shape
+
     # DO DROPOUT WITH PROBABILITY DEFINED ABOVE
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if (P == 0) | (ct == 0) | (sz == 0):
+        if rank == 2:
+            image = tf.reshape(image, [h, w, 3])
+        else:
+            image = tf.reshape(image, [h, w, d, 3])
         return image  # no action
 
     # Extract dimension
@@ -455,7 +463,6 @@ def cutmix(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
         A batch of images with Cutmix applied
     """
 
-    DIM = dimension
     rank = len(batch.shape) - 2
     batch_size = batch.shape[0]
 
@@ -466,20 +473,20 @@ def cutmix(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
         P = tf.cast(tf.random.uniform([], 0, 1) <= prob, tf.int32)
 
         b = tf.random.uniform([], 0, 1)  # this is beta dist with alpha=1.0
-        WIDTH = tf.cast(DIM * tf.math.sqrt(1 - b), tf.int32) * P
+        WIDTH = tf.cast(dimension * tf.math.sqrt(1 - b), tf.int32) * P
 
         # Choose random location
-        x = tf.cast(tf.random.uniform([], 0, DIM), tf.int32)
-        y = tf.cast(tf.random.uniform([], 0, DIM), tf.int32)
+        x = tf.cast(tf.random.uniform([], 0, dimension), tf.int32)
+        y = tf.cast(tf.random.uniform([], 0, dimension), tf.int32)
 
         # Compute square / cube
-        ya, yb = _points(DIM, y, WIDTH)
-        xa, xb = _points(DIM, x, WIDTH)
+        ya, yb = _points(dimension, y, WIDTH)
+        xa, xb = _points(dimension, x, WIDTH)
 
         # Include third dimension for 3D
         if rank == 3:
-            z = tf.cast(tf.random.uniform([], 0, DIM), tf.int32)
-            za, zb = _points(DIM, z, WIDTH)
+            z = tf.cast(tf.random.uniform([], 0, dimension), tf.int32)
+            za, zb = _points(dimension, z, WIDTH)
 
         # Choose Random Image to Cutmix with
         k = tf.cast(tf.random.uniform([], 0, batch_size), tf.int32)
@@ -492,14 +499,14 @@ def cutmix(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
         imgs.append(image)
 
         # Make Cutmix Label
-        a = tf.cast((WIDTH ** rank) / (DIM ** rank), tf.float32)
+        a = tf.cast((WIDTH ** rank) / (dimension ** rank), tf.float32)
         labs.append(_mixup_labels(label.shape, label[j], label[k], n_classes, a))
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR (maybe use Python typing instead?)
     if rank == 2:
-        image2 = tf.reshape(tf.stack(imgs), (batch_size, DIM, DIM, 3))
+        image2 = tf.reshape(tf.stack(imgs), (batch_size, dimension, dimension, 3))
     else:
-        image2 = tf.reshape(tf.stack(imgs), (batch_size, DIM, DIM, DIM, 3))
+        image2 = tf.reshape(tf.stack(imgs), (batch_size, dimension, dimension, dimension, 3))
 
     if n_labels:
         label2 = tf.reshape(tf.stack(labs), (batch_size, n_labels))
@@ -535,8 +542,6 @@ def mixup(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
         A batch of images with Mixup applied
     """
 
-    DIM = dimension
-    CLASSES = n_classes
     rank = len(batch.shape) - 2
     batch_size = batch.shape[0]
 
@@ -557,8 +562,8 @@ def mixup(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
         labs.append(_mixup_labels(label.shape, label[j], label[k], n_classes, a))
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR (maybe use Python typing instead?)
-    image2 = tf.reshape(tf.stack(imgs), (batch_size, DIM, DIM, 3)) if rank == 2 else tf.reshape(tf.stack(imgs), (
-    batch_size, DIM, DIM, DIM, 3))
+    image2 = tf.reshape(tf.stack(imgs), (batch_size, dimension, dimension, 3)) if rank == 2 else tf.reshape(tf.stack(imgs), (
+    batch_size, dimension, dimension, dimension, 3))
 
     if n_labels:
         label2 = tf.reshape(tf.stack(labs), (batch_size, n_labels))
@@ -569,6 +574,33 @@ def mixup(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
 
 def spec_augmentation(image, prob=0.66, time_drop_width=0.0625, time_stripes_num=2, freq_drop_width=0.125,
                       freq_stripes_num=2, height=64, width=501):
+    """
+    Add white noise to object or image
+
+    Parameters
+    ----------
+    image : tf.Tensor
+        image of size [height,width,3] not a batch of [b,dim,dim,3]
+    prob : float
+        probability to perform dropout
+    time_drop_width : float
+
+    time_stripes_num : int
+
+    freq_drop_width : float
+
+    freq_stripes_num : int
+
+    height : int
+
+    width : int
+
+
+    Returns
+    -------
+    tf.Tensor
+        input image or object with added white noise
+    """
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if (P == 0):
         return image  # no action
@@ -625,6 +657,25 @@ def add_white_noise(image, prob=0.3, std=0.2):
 
 
 def add_band_noise(image, prob=0.3, std=0.2, band_height=0.125):
+    """
+    Add white noise to an horizontal band in an image
+
+    Parameters
+    ----------
+    image : tf.Tensor
+        image of size [height,width,3] not a batch of [b,dim,dim,3]
+    prob : float
+        probability to perform dropout
+    std : size
+        Number of standard deviations to calculate noise with
+    band_height : float
+        Percentage of the height of the band
+
+    Returns
+    -------
+    tf.Tensor
+        input image or object with added noise
+    """
     P = tf.cast(tf.random.uniform([], 0, 1) < prob, tf.int32)
     if (P == 0):
         return image  # no action
