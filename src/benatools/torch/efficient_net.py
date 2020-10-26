@@ -7,7 +7,6 @@ from torch import nn
 import geffnet.gen_efficientnet as efn
 
 
-
 class Identity(nn.Module):
     def __init__(self):
         super(Identity, self).__init__()

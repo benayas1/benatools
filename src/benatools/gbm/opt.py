@@ -217,7 +217,7 @@ class OptimizerCB(BaseOptimizer):
                        as_pandas=True)
 
             # Metric to extract the loss from
-            test_loss = 'test-RMSE-mean'
+            test_loss = 'tests-RMSE-mean'
             train_loss = 'train-RMSE-mean'
             best_iteration = cv[test_loss].idxmin()
             test_loss_value = cv[test_loss].iloc[best_iteration]
@@ -283,7 +283,7 @@ class OptimizerXGB(BaseOptimizer):
                         early_stopping_rounds=early_stopping)
 
             # Metric to extract the loss from
-            test_loss = 'test-rmse-mean'
+            test_loss = 'tests-rmse-mean'
             train_loss = 'train-rmse-mean'
             best_iteration = cv[test_loss].idxmin()
             test_loss_value = cv[test_loss].iloc[best_iteration]

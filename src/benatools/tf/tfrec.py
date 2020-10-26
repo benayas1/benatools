@@ -1,8 +1,6 @@
 import tensorflow as tf
 import numpy as np
 import os
-import pandas as pd
-from tqdm import tqdm
 
 def bytes_feature(value):
     """Returns a bytes_list from a string / byte."""

@@ -85,7 +85,7 @@ class MultiStratifiedKFold():
         return train_idx, val_idx
     
     def split(self, X=None, y=None, groups=None):
-        """Generate indices to split data into training and test set.
+        """Generate indices to split data into training and tests set.
         
         Parameters
         ----------
@@ -95,7 +95,7 @@ class MultiStratifiedKFold():
         ------
         train : ndarray
             The training set indices for that split.
-        test : ndarray
+        tests : ndarray
             The testing set indices for that split.
         """
         for i in range(self.n_splits):
