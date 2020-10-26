@@ -143,6 +143,17 @@ class BaseOptimizer(ABC):
         plt.show()
 
     def save_json(self, data, path, verbose=1):
+        """
+
+        Parameters
+        ----------
+        data :
+            data to be saved
+        path : str
+            file path
+        verbose : int
+            1 means verbose, 0 means silence
+        """
         if path[path.rfind('.'):] != '.json':
             path = path + '.json'
         with open(path, 'w') as fp:
