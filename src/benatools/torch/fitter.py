@@ -59,7 +59,7 @@ class TorchFitter:
     model : torch.nn.Module
         Model to be fitted
     device : int
-        Number of splits
+        device can be cuda or cpu
     loss : torch.nn.loss object or function returning
         DataFrame to split
     optimizer : torch.optim object
@@ -73,6 +73,8 @@ class TorchFitter:
         Optional, folder where to store checkpoints
     verbose : int, defaults to 0
         number of step to print every training summary
+    log_file : bool
+        whether to write the log in log.txt or not
     """
 
     def __init__(self,
@@ -84,7 +86,8 @@ class TorchFitter:
                  validation_scheduler=True,
                  step_scheduler=False,
                  folder='models',
-                 verbose=0
+                 verbose=0,
+                 log_file=True,
                  ):
 
         if type(loss) == type:
@@ -114,7 +117,7 @@ class TorchFitter:
         self.step_scheduler = step_scheduler  # do scheduler.step after optimizer.step
         self.log(f'Fitter prepared. Device is {self.device}')
 
-    def fit(self, train_loader, val_loader, n_epochs=1, metric=None, metric_kwargs=None, early_stopping=0, early_stopping_mode='min', save_checkpoint=True):
+    def fit(self, train_loader, val_loader, n_epochs=1, metric=None, metric_kwargs={}, early_stopping=0, early_stopping_mode='min', save_checkpoint=True):
         """ Fits a model
 
         Parameters
@@ -212,7 +215,7 @@ class TorchFitter:
 
         return pd.DataFrame(training_history).set_index('epoch')
 
-    def validation(self, val_loader, metric=None, metric_kwargs=None):
+    def validation(self, val_loader, metric=None, metric_kwargs={}):
         """
         Validates a model
 
