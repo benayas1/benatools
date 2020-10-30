@@ -246,9 +246,9 @@ class TorchFitter:
             if self.verbose > 0:
                 if step % self.verbose == 0:
                     print(
-                        f'Val Step {step}/{len(val_loader)}, '
-                        f'summary_loss: {summary_loss.avg:.5f}, '
-                        f'time: {(time.time() - t):.5f}', end='\r'
+                        f'\rVal Step {step}/{len(val_loader)}, '
+                        f'Summary_loss: {summary_loss.avg:.5f}, '
+                        f'time: {(time.time() - t):.5f}', end=''
                     )
             with torch.no_grad():  # no gradient update
                 batch_size = images.shape[0]
@@ -291,16 +291,13 @@ class TorchFitter:
         t = time.time()
 
         # run epoch
-        print("verbose is", str(self.verbose))
         for step, (images, labels) in enumerate(train_loader):
             if self.verbose > 0:
-                print('step', str(step), str(step % self.verbose))
                 if step % self.verbose == 0:
-                    print('Deberia imprimir en pantalla')
                     print(
-                        f'Train Step {step}/{len(train_loader)}, ' +
-                        f'summary_loss: {summary_loss.avg:.5f}, ' +
-                        f'time: {(time.time() - t):.5f}', end='\r'
+                        f'\rTrain Step {step}/{len(train_loader)}, ' +
+                        f'Summary_loss: {summary_loss.avg:.5f}, ' +
+                        f'time: {(time.time() - t):.5f}', end=''
                     )
             # extract images and labels from the dataloader
             batch_size = images.shape[0]
@@ -407,9 +404,9 @@ class TorchFitterBoxes(TorchFitter):
             if self.verbose:
                 if step % self.verbose == 0:
                     print(
-                        f'Val Step {step}/{len(val_loader)}, '
-                        f'summary_loss: {summary_loss.avg:.5f}, '
-                        f'time: {(time.time() - t):.5f}', end='\r'
+                        f'\rVal Step {step}/{len(val_loader)}, '
+                        f'Summary_loss: {summary_loss.avg:.5f}, '
+                        f'time: {(time.time() - t):.5f}', end=''
                     )
             with torch.no_grad():  # no gradient update
                 images = torch.stack(images)
@@ -447,9 +444,9 @@ class TorchFitterBoxes(TorchFitter):
             if self.verbose > 0:
                 if step % self.verbose == 0:
                     print(
-                        f'Train Step {step}/{len(train_loader)}, ' +
-                        f'summary_loss: {summary_loss.avg:.5f}, ' +
-                        f'time: {(time.time() - t):.5f}', end='\r'
+                        f'\rTrain Step {step}/{len(train_loader)}, ' +
+                        f'Summary_loss: {summary_loss.avg:.5f}, ' +
+                        f'time: {(time.time() - t):.5f}', end=''
                     )
             # extract images, boxes and labels from the dataloader
             images = torch.stack(images)
