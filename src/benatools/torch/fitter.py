@@ -127,7 +127,7 @@ class TorchFitter:
         val_loader : torch.utils.data.DataLoader
             Validation Data
         n_epochs : int
-            maximum number of epochs to train
+            Maximum number of epochs to train
         metric : function with (y_true, y_pred, **metric_kwargs) signature
             Metric to evaluate results on
         metric_kwargs : dict
@@ -135,9 +135,9 @@ class TorchFitter:
         early_stopping : int
             Early stopping epochs
         early_stopping_mode : str
-            min or max
+            Min or max criteria
         save_checkpoint : bool
-            whether to save the checkpoint when training
+            Whether to save the checkpoint when training
 
         Returns
         -------
@@ -231,9 +231,9 @@ class TorchFitter:
         Returns
         -------
         AverageMeter
-            object with this epochs's average loss
+            Object with this epochs's average loss
         float
-            calculated metric if a metric is provided, else None
+            Calculated metric if a metric is provided, else None
         """
 
         self.model.eval()
@@ -284,15 +284,17 @@ class TorchFitter:
         Returns
         -------
         AverageMeter
-            object with this epochs's average loss
+            Object with this epochs's average loss
         """
         self.model.train()  # set train mode
         summary_loss = AverageMeter()  # object to track the average loss
         t = time.time()
 
         # run epoch
+        print("verbose is", str(self.verbose))
         for step, (images, labels) in enumerate(train_loader):
             if self.verbose > 0:
+                print('step', str(step), str(step % self.verbose))
                 if step % self.verbose == 0:
                     print(
                         f'Train Step {step}/{len(train_loader)}, ' +
@@ -329,7 +331,7 @@ class TorchFitter:
         Parameters
         ----------
         path : str
-            path of the file to be saved
+            Path of the file to be saved
         verbose : int
             1 = print logs, 0 = silence
         """
@@ -351,7 +353,7 @@ class TorchFitter:
         Parameters
         ----------
         path : str
-            path of the file to be loaded
+            Path of the file to be loaded
         """
         checkpoint = torch.load(path)
         self.model.load_state_dict(checkpoint['model_state_dict'])
@@ -367,7 +369,7 @@ class TorchFitter:
         Parameters
         ----------
         message : str
-            message to be logged
+            Message to be logged
         """
         if self.verbose > 0:
             print(message)

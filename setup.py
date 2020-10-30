@@ -1,5 +1,10 @@
 import io
 import os
+from glob import glob
+from os.path import basename
+from os.path import dirname
+from os.path import join
+from os.path import splitext
 import sys
 from shutil import rmtree
 from setuptools import find_packages, setup, Command
@@ -13,7 +18,7 @@ URL = 'https://github.com/benayas1/benatools'
 EMAIL = 'benayas1@gmail.com'
 AUTHOR = 'Alberto Benayas'
 REQUIRES_PYTHON = '>=3.6.0'
-VERSION = '0.0.89'
+VERSION = '0.0.91'
 
 # What packages are required for this module to be executed?
 requirements = [
@@ -122,9 +127,14 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url=URL,
-    packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
+    packages=find_packages("src", exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
+    package_dir={'': 'src'},
+    py_modules=[splitext(basename(path))[0] for path in glob('src/*.py')],
     classifiers=[
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
@@ -132,7 +142,8 @@ setup(
     python_requires=REQUIRES_PYTHON,
 
     tests_require=['pytest'],
-    cmdclass = {'test': PyTest},
+    cmdclass = {'test': PyTest,
+                'upload': UploadCommand},
     # $ setup.py publish support.
     #cmdclass={'upload': UploadCommand},
 )
