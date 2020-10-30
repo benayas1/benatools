@@ -249,7 +249,7 @@ class TorchFitter:
                         f'\rVal Step {step}/{len(val_loader)}, ' +
                         f'summary_loss: {summary_loss.avg:.5f}, ' +
                         f'time: {(time.time() - t):.5f} secs,' + 
-                        f'ETA: {(len(val_loader)-step)*(time.time() - t)/step}', end=''
+                        f'ETA: {(len(val_loader)-step)*(time.time() - t)/(step+1)}', end=''
                     )
             with torch.no_grad():  # no gradient update
                 batch_size = images.shape[0]
@@ -301,7 +301,7 @@ class TorchFitter:
                         f'\rTrain Step {step}/{len(train_loader)}, ' +
                         f'summary_loss: {summary_loss.avg:.5f}, ' +
                         f'time: {(time.time() - t):.2f} secs, ' +
-                        f'ETA: {(len(train_loader)-step)*(time.time() - t)/step}', end=''
+                        f'ETA: {(len(train_loader)-step)*(time.time() - t)/(step+1)}', end=''
                     )
             # extract images and labels from the dataloader
             batch_size = images.shape[0]
