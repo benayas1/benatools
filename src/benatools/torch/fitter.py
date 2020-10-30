@@ -246,9 +246,10 @@ class TorchFitter:
             if self.verbose > 0:
                 if step % self.verbose == 0:
                     print(
-                        f'\rVal Step {step}/{len(val_loader)}, '
-                        f'Summary_loss: {summary_loss.avg:.5f}, '
-                        f'time: {(time.time() - t):.5f}', end=''
+                        f'\rVal Step {step}/{len(val_loader)}, ' +
+                        f'summary_loss: {summary_loss.avg:.5f}, ' +
+                        f'time: {(time.time() - t):.5f} secs,' + 
+                        f'ETA: {(len(val_loader)-step)*(time.time() - t)/step}', end=''
                     )
             with torch.no_grad():  # no gradient update
                 batch_size = images.shape[0]
@@ -257,7 +258,8 @@ class TorchFitter:
 
                 if metric:
                     arr = labels.cpu().numpy()
-                    y_true += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
+                    y_true += arr.tolist()
+                    #y_true += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
 
                 # just forward propagation
                 output = self.model(images)
@@ -266,7 +268,8 @@ class TorchFitter:
 
                 if metric:
                     arr = output.cpu().numpy()
-                    y_preds += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
+                    y_preds += arr.tolist()
+                    #y_preds += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
 
         calculated_metric = metric(y_true, y_preds, **metric_kwargs) if metric else None
 
@@ -296,8 +299,9 @@ class TorchFitter:
                 if step % self.verbose == 0:
                     print(
                         f'\rTrain Step {step}/{len(train_loader)}, ' +
-                        f'Summary_loss: {summary_loss.avg:.5f}, ' +
-                        f'time: {(time.time() - t):.5f}', end=''
+                        f'summary_loss: {summary_loss.avg:.5f}, ' +
+                        f'time: {(time.time() - t):.2f} secs, ' +
+                        f'ETA: {(len(train_loader)-step)*(time.time() - t)/step}', end=''
                     )
             # extract images and labels from the dataloader
             batch_size = images.shape[0]
@@ -405,7 +409,7 @@ class TorchFitterBoxes(TorchFitter):
                 if step % self.verbose == 0:
                     print(
                         f'\rVal Step {step}/{len(val_loader)}, '
-                        f'Summary_loss: {summary_loss.avg:.5f}, '
+                        f'summary_loss: {summary_loss.avg:.5f}, '
                         f'time: {(time.time() - t):.5f}', end=''
                     )
             with torch.no_grad():  # no gradient update
@@ -445,7 +449,7 @@ class TorchFitterBoxes(TorchFitter):
                 if step % self.verbose == 0:
                     print(
                         f'\rTrain Step {step}/{len(train_loader)}, ' +
-                        f'Summary_loss: {summary_loss.avg:.5f}, ' +
+                        f'summary_loss: {summary_loss.avg:.5f}, ' +
                         f'time: {(time.time() - t):.5f}', end=''
                     )
             # extract images, boxes and labels from the dataloader
