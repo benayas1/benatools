@@ -71,8 +71,8 @@ class TorchFitter:
     step_scheduler=False:
     folder : str
         Optional, folder where to store checkpoints
-    verbose : int, defaults to 0
-        number of step to print every training summary
+    verbose : bool
+        Whether to print outputs or not
     log_file : bool
         whether to write the log in log.txt or not
     """
@@ -86,7 +86,7 @@ class TorchFitter:
                  validation_scheduler=True,
                  step_scheduler=False,
                  folder='models',
-                 verbose=0,
+                 verbose=True,
                  log_file=True,
                  ):
 
@@ -117,7 +117,16 @@ class TorchFitter:
         self.step_scheduler = step_scheduler  # do scheduler.step after optimizer.step
         self.log(f'Fitter prepared. Device is {self.device}')
 
-    def fit(self, train_loader, val_loader, n_epochs=1, metric=None, metric_kwargs={}, early_stopping=0, early_stopping_mode='min', save_checkpoint=True):
+    def fit(self, 
+            train_loader, 
+            val_loader, 
+            n_epochs=1, 
+            metric=None, 
+            metric_kwargs={}, 
+            early_stopping=0, 
+            early_stopping_mode='min', 
+            save_checkpoint=True,
+            verbose_steps=0):
         """ Fits a model
 
         Parameters
@@ -138,12 +147,14 @@ class TorchFitter:
             Min or max criteria
         save_checkpoint : bool
             Whether to save the checkpoint when training
+        verbose_steps : int, defaults to 0
+            number of step to print every training summary
 
         Returns
         -------
         returns a pandas DataFrame object with training history
         """
-        self.best_metric = 10 ** 5 if early_stopping_mode == 'min' else -10 ** 5
+        self.best_metric = 10 ** 7 if early_stopping_mode == 'min' else -10 ** 7
 
         training_history = []
         es_epochs = 0
@@ -151,35 +162,25 @@ class TorchFitter:
             history = {'epoch': e}  # training history log for this epoch
 
             # Update log
-            if self.verbose > 0:
-                lr = self.optimizer.param_groups[0]['lr']
-                timestamp = datetime.utcnow().isoformat()
-                self.log(f'\n{timestamp}\nEPOCH {str(self.epoch)}/{str(n_epochs)} - LR: {lr}')
+            lr = self.optimizer.param_groups[0]['lr']
+            self.log(f'\n{datetime.utcnow().isoformat()}\nEPOCH {str(self.epoch+1)}/{str(n_epochs)} - LR: {lr}')
 
             # Run one training epoch
             t = time.time()
-            train_summary_loss = self.train_one_epoch(train_loader)
+            train_summary_loss = self.train_one_epoch(train_loader, verbose_steps=verbose_steps)
             history['train'] = train_summary_loss.avg  # training loss
 
-            # Print training result
-            #self.log(f'[RESULT]: Train. summary_loss: {train_summary_loss.avg:.5f}, '
-            #         f'time: {(time.time() - t):.2f}')
+            # Save checkpoint
             if save_checkpoint:
                 self.save(f'{self.base_dir}/last-checkpoint.bin', False)
 
             # Run epoch validation
-            t = time.time()
-            val_summary_loss, calculated_metric = self.validation(val_loader, metric, metric_kwargs)
+            val_summary_loss, calculated_metric = self.validation(val_loader, metric=metric, metric_kwargs=metric_kwargs, verbose_steps=verbose_steps)
             history['val'] = val_summary_loss.avg  # validation loss
             history['lr'] = self.optimizer.param_groups[0]['lr']
 
-            # Print validation results
-            #self.log(f'[RESULT]: Valid. summary_loss: {val_summary_loss.avg:.5f}, ' +\
-            #         f'metric {calculated_metric},' if calculated_metric else '' +\
-            #         f'time: {(time.time() - t):.2f}')
-
-            metric_log = f'metric {calculated_metric},' if calculated_metric else ''
-            self.log(f'[RESULT] {(time.time() - t):.2f}s - train loss: {train_summary_loss.avg:.5f} - val loss: {val_summary_loss.avg:.5f} ' + metric_log)
+            metric_log = f'- metric {calculated_metric},' if calculated_metric else ''
+            self.log(f'\r[RESULT] {(time.time() - t):.2f}s - train loss: {train_summary_loss.avg:.5f} - val loss: {val_summary_loss.avg:.5f} ' + metric_log)
 
             if calculated_metric:
                 history['val_metric'] = calculated_metric
@@ -207,6 +208,7 @@ class TorchFitter:
                 training_history.append(history)
                 break
 
+            # Scheduler step after validation
             if self.validation_scheduler:
                 self.scheduler.step(metrics=val_summary_loss.avg)
 
@@ -215,67 +217,7 @@ class TorchFitter:
 
         return pd.DataFrame(training_history).set_index('epoch')
 
-    def validation(self, val_loader, metric=None, metric_kwargs={}):
-        """
-        Validates a model
-
-        Parameters
-        ----------
-        val_loader : torch.utils.data.DataLoader
-            Validation Data
-        metric : function with (y_true, y_pred, **metric_kwargs) signature
-            Metric to evaluate results on
-        metric_kwargs : dict
-            Arguments for the passed metric. Ignored if metric is None
-
-        Returns
-        -------
-        AverageMeter
-            Object with this epochs's average loss
-        float
-            Calculated metric if a metric is provided, else None
-        """
-
-        self.model.eval()
-        summary_loss = AverageMeter()
-        y_preds = []
-        y_true = []
-
-        t = time.time()
-        for step, (images, labels) in enumerate(val_loader):
-            if self.verbose > 0:
-                if step % self.verbose == 0:
-                    print(
-                        f'\rVal Step {step}/{len(val_loader)}, ' +
-                        f'summary_loss: {summary_loss.avg:.5f}, ' +
-                        f'time: {(time.time() - t):.5f} secs,' + 
-                        f'ETA: {(len(val_loader)-step)*(time.time() - t)/(step+1)}', end=''
-                    )
-            with torch.no_grad():  # no gradient update
-                batch_size = images.shape[0]
-                images = images.to(self.device).float()
-                labels = labels.to(self.device)
-
-                if metric:
-                    arr = labels.cpu().numpy()
-                    y_true += arr.tolist()
-                    #y_true += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
-
-                # just forward propagation
-                output = self.model(images)
-                loss = self.loss_function(output, labels)
-                summary_loss.update(loss.detach().item(), batch_size)
-
-                if metric:
-                    arr = output.cpu().numpy()
-                    y_preds += arr.tolist()
-                    #y_preds += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
-
-        calculated_metric = metric(y_true, y_preds, **metric_kwargs) if metric else None
-
-        return summary_loss, calculated_metric
-
-    def train_one_epoch(self, train_loader):
+    def train_one_epoch(self, train_loader, verbose_steps=0):
         """
         Run one epoch on the train dataset
 
@@ -283,6 +225,8 @@ class TorchFitter:
         ----------
         train_loader : torch.DataLoader
             DataLoaders containing the training dataset
+        verbose_steps : int, defaults to 0
+            number of step to print every training summary
 
         Returns
         -------
@@ -295,13 +239,13 @@ class TorchFitter:
 
         # run epoch
         for step, (images, labels) in enumerate(train_loader):
-            if self.verbose > 0:
-                if step % self.verbose == 0:
+            if self.verbose & (verbose_steps > 0):
+                if step % verbose_steps == 0:
                     print(
                         f'\rTrain Step {step}/{len(train_loader)}, ' +
                         f'summary_loss: {summary_loss.avg:.5f}, ' +
                         f'time: {(time.time() - t):.2f} secs, ' +
-                        f'ETA: {(len(train_loader)-step)*(time.time() - t)/(step+1)}', end=''
+                        f'ETA: {(len(train_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
             # extract images and labels from the dataloader
             batch_size = images.shape[0]
@@ -324,7 +268,113 @@ class TorchFitter:
             if self.step_scheduler:
                 self.scheduler.step()
 
+        self.log(f'\r[TRAIN] {(time.time() - t):.2f}s - train loss: {summary_loss.avg:.5f} ')
+
         return summary_loss
+
+    def validation(self, val_loader, metric=None, metric_kwargs={}, verbose_steps=0):
+        """
+        Validates a model
+
+        Parameters
+        ----------
+        val_loader : torch.utils.data.DataLoader
+            Validation Data
+        metric : function with (y_true, y_pred, **metric_kwargs) signature
+            Metric to evaluate results on
+        metric_kwargs : dict
+            Arguments for the passed metric. Ignored if metric is None
+        verbose_steps : int, defaults to 0
+            number of step to print every training summary
+
+        Returns
+        -------
+        AverageMeter
+            Object with this epochs's average loss
+        float
+            Calculated metric if a metric is provided, else None
+        """
+
+        self.model.eval()
+        summary_loss = AverageMeter()
+        y_preds = []
+        y_true = []
+
+        t = time.time()
+        for step, (images, labels) in enumerate(val_loader):
+            if self.verbose & (verbose_steps > 0):
+                if step % verbose_steps == 0:
+                    print(
+                        f'\rVal Step {step}/{len(val_loader)}, ' +
+                        f'summary_loss: {summary_loss.avg:.5f}, ' +
+                        f'time: {(time.time() - t):.2f} secs,' + 
+                        f'ETA: {(len(val_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
+                    )
+            with torch.no_grad():  # no gradient update
+                batch_size = images.shape[0]
+                images = images.to(self.device).float()
+                labels = labels.to(self.device)
+
+                if metric:
+                    arr = labels.cpu().numpy()
+                    y_true += arr.tolist()
+                    #y_true += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
+
+                # just forward propagation
+                output = self.model(images)
+                loss = self.loss_function(output, labels)
+                summary_loss.update(loss.detach().item(), batch_size)
+
+                if metric:
+                    arr = output.cpu().numpy()
+                    y_preds += arr.tolist()
+                    #y_preds += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
+
+        calculated_metric = metric(y_true, y_preds, **metric_kwargs) if metric else None
+        metric_log = f'- metric {calculated_metric},' if calculated_metric else ''
+        self.log(f'\r[VALIDATION] {(time.time() - t):.2f}s - validation loss: {summary_loss.avg:.5f} ' + metric_log)
+        return summary_loss, calculated_metric
+
+    def predict(self, test_loader, verbose_steps=0):
+        """
+        Makes predictions using the trained model
+
+        Parameters
+        ----------
+        test_loader : torch.utils.data.DataLoader
+            Test Data
+        verbose_steps : int, defaults to 0
+            number of step to print every training summary    
+
+        Returns
+        -------
+        np.array
+            Predicted values by the model
+        """
+
+        self.model.eval()
+        y_preds = []
+        t = time.time()
+
+        for step, (images, labels) in enumerate(test_loader):
+            if self.verbose & (verbose_steps > 0) > 0:
+                if step % verbose_steps == 0:
+                    print(
+                        f'\Prediction Step {step}/{len(test_loader)}, ' +
+                        f'time: {(time.time() - t):.2f} secs,' + 
+                        f'ETA: {(len(test_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
+                    )
+            with torch.no_grad():  # no gradient update
+                batch_size = images.shape[0]
+                images = images.to(self.device).float()
+
+                # Output and loss
+                output = self.model(images)
+
+                arr = output.cpu().numpy()
+                y_preds += arr.tolist()
+
+        return np.array(y_preds)
 
     def save(self, path, verbose=True):
         """
@@ -373,7 +423,7 @@ class TorchFitter:
         message : str
             Message to be logged
         """
-        if self.verbose > 0:
+        if self.verbose:
             print(message)
         with open(self.log_path, 'a+') as logger:
             logger.write(f'{message}\n')
