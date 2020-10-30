@@ -6,7 +6,7 @@ class CategoricalCrossEntropy(torch.nn.Module):
     Equivalent to tf.keras.losses.CategoricalCrossEntropy.
 
     Adapted to receive one-hot tensors as the true label.
-    
+
     In order to get the cross entropy loss, values must follow the pipeline:
     logits --> probs --> log --> loss
 
@@ -44,11 +44,8 @@ class CategoricalCrossEntropy(torch.nn.Module):
 
         # Check if it comes from logits (no softmax applied) or the softmax needs to be applied
         if self.from_logits:
-            print('logits')
-            logsoftmax = torch.nn.LogSoftmax(dim=1)
-            y_pred = logsoftmax(y_pred)
+            y_pred = torch.nn.LogSoftmax(dim=1)(y_pred)
         else:
-            print('probs')
             y_pred = torch.log(y_pred)
             
         # Reduction method
