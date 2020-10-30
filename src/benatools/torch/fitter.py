@@ -296,6 +296,7 @@ class TorchFitter:
             if self.verbose > 0:
                 print('step', str(step), str(step % self.verbose))
                 if step % self.verbose == 0:
+                    print('Deberia imprimir en pantalla')
                     print(
                         f'Train Step {step}/{len(train_loader)}, ' +
                         f'summary_loss: {summary_loss.avg:.5f}, ' +
