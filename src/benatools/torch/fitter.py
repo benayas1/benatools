@@ -210,7 +210,7 @@ class TorchFitter:
 
             # Scheduler step after validation
             if self.validation_scheduler:
-                self.scheduler.step(metrics=val_summary_loss.avg)
+                self.scheduler.step(metrics=calculated_metric)
 
             training_history.append(history)
             self.epoch += 1
