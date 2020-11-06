@@ -30,7 +30,7 @@ class GA():
         best_sample = x[np.argmin(scores)]
         
         if self.verbose:
-            print('\t Loop %i - Best %.3f - Avg %.3f - Worst %.3f' %(0, np.min(scores), np.mean(scores), np.max(scores) ))
+            print('\t Loop %i - Best %.6f - Avg %.6f - Worst %.6f' %(0, np.min(scores), np.mean(scores), np.max(scores) ))
         history.append({'best':np.min(scores), 'mean':np.mean(scores), 'worst':np.max(scores)})
 
         for i in range(0, n_gen):
@@ -53,7 +53,7 @@ class GA():
 
             # Print generation results
             if self.verbose:
-                print('\t Loop %i - Best %.3f - Avg %.3f - Worst %.3f' %(i+1, np.min(scores), np.mean(scores), np.max(scores) ))
+                print('\t Loop %i - Best %.6f - Avg %.6f - Worst %.6f' %(i+1, np.min(scores), np.mean(scores), np.max(scores) ))
             history.append({'best':np.min(scores), 'mean':np.mean(scores), 'worst':np.max(scores)})
             
         self.best_sample = best_sample
