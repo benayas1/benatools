@@ -238,7 +238,7 @@ class TorchFitter:
         t = time.time()
 
         # run epoch
-        for step, (images, labels) in enumerate(train_loader):
+        for step, data in enumerate(train_loader):
             if self.verbose & (verbose_steps > 0):
                 if step % verbose_steps == 0:
                     print(
@@ -247,19 +247,11 @@ class TorchFitter:
                         f'time: {(time.time() - t):.2f} secs, ' +
                         f'ETA: {(len(train_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
-            # extract images and labels from the dataloader
-            batch_size = images.shape[0]
-            images = images.to(self.device).float()
-            labels = labels.to(self.device)
+            # Calculate batch size
+            batch_size = data[0].shape[0]
 
-            self.optimizer.zero_grad()
-
-            # Output and loss
-            output = self.model(images)
-            loss = self.loss_function(output, labels)
-
-            # backpropagation
-            loss.backward()
+            # Run one batch
+            loss = self.train_one_batch(data)
 
             summary_loss.update(loss.detach().item(), batch_size)
 
@@ -271,6 +263,45 @@ class TorchFitter:
         self.log(f'\r[TRAIN] {(time.time() - t):.2f}s - train loss: {summary_loss.avg:.5f} ')
 
         return summary_loss
+
+    def train_one_batch(self, data):
+        """
+        Trains one batch of data. 
+        The actions to be done here are: 
+        - extract x and y (labels)
+        - calculate output and loss
+        - backpropagate
+
+        Parameters
+        ----------
+        data : Tuple of torch.Tensor
+            Batch of data. Normally the first element is the data (X) and the second is the label (y), but it dependes on what the Dataset outputs.
+
+        Returns
+        -------
+        torch.Tensor
+            A tensor with the calculated loss
+        int
+            The batch size 
+        """
+        # extract x and y from the dataloader
+        x = data[0]
+        y = data[1]
+
+        # send them to device
+        x = x.to(self.device).float()
+        y = y.to(self.device)
+
+        self.optimizer.zero_grad()
+
+        # Output and loss
+        output = self.model(x)
+        loss = self.loss_function(output, y)
+
+        # backpropagation
+        loss.backward()
+
+        return loss
 
     def validation(self, val_loader, metric=None, metric_kwargs={}, verbose_steps=0):
         """
