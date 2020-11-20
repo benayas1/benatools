@@ -260,7 +260,7 @@ class TorchFitter:
             if self.step_scheduler:
                 self.scheduler.step()
 
-        self.log(f'\r[TRAIN] {(time.time() - t):.2f}s - train loss: {summary_loss.avg:.5f} ')
+        self.log(f'\r[TRAIN] {(time.time() - t):.2f}s - train loss: {summary_loss.avg:.5f}')
 
         return summary_loss
 
@@ -285,8 +285,8 @@ class TorchFitter:
             The batch size 
         """
         # extract x and y from the dataloader
-        x = data[0]
-        y = data[1]
+        x = data['x']
+        y = data['y']
 
         # send them to device
         x = x.to(self.device).float()
@@ -332,7 +332,7 @@ class TorchFitter:
         y_true = []
 
         t = time.time()
-        for step, (images, labels) in enumerate(val_loader):
+        for step, data in enumerate(val_loader):
             if self.verbose & (verbose_steps > 0):
                 if step % verbose_steps == 0:
                     print(
@@ -342,28 +342,24 @@ class TorchFitter:
                         f'ETA: {(len(val_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
             with torch.no_grad():  # no gradient update
-                batch_size = images.shape[0]
-                images = images.to(self.device).float()
-                labels = labels.to(self.device)
+                x = data['x'].to(self.device).float()
+                y = data['y'].to(self.device)
+                batch_size = x.shape[0]
 
                 if metric:
-                    arr = labels.cpu().numpy()
-                    y_true += arr.tolist()
-                    #y_true += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
+                    y_true += y.cpu().numpy().tolist()
 
                 # just forward propagation
-                output = self.model(images)
-                loss = self.loss_function(output, labels)
+                output = self.model(x)
+                loss = self.loss_function(output, y)
                 summary_loss.update(loss.detach().item(), batch_size)
 
                 if metric:
-                    arr = output.cpu().numpy()
-                    y_preds += arr.tolist()
-                    #y_preds += np.argmax(arr, axis=1).tolist() if len(arr.shape)==2 else arr.tolist()
+                    y_preds += output.cpu().numpy().tolist()
 
         calculated_metric = metric(y_true, y_preds, **metric_kwargs) if metric else None
         metric_log = f'- metric {calculated_metric},' if calculated_metric else ''
-        self.log(f'\r[VALIDATION] {(time.time() - t):.2f}s - validation loss: {summary_loss.avg:.5f} ' + metric_log)
+        self.log(f'\r[VALIDATION] {(time.time() - t):.2f}s - val. loss: {summary_loss.avg:.5f} ' + metric_log)
         return summary_loss, calculated_metric
 
     def predict(self, test_loader, verbose_steps=0):
@@ -387,7 +383,7 @@ class TorchFitter:
         y_preds = []
         t = time.time()
 
-        for step, (images, labels) in enumerate(test_loader):
+        for step, data in enumerate(test_loader):
             if self.verbose & (verbose_steps > 0) > 0:
                 if step % verbose_steps == 0:
                     print(
@@ -396,14 +392,13 @@ class TorchFitter:
                         f'ETA: {(len(test_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
             with torch.no_grad():  # no gradient update
-                batch_size = images.shape[0]
-                images = images.to(self.device).float()
+                x = data['x'].to(self.device).float()
+                batch_size = x.shape[0]
 
                 # Output and loss
-                output = self.model(images)
+                output = self.model(x)
 
-                arr = output.cpu().numpy()
-                y_preds += arr.tolist()
+                y_preds += output.cpu().numpy().tolist()
 
         return np.array(y_preds)
 
