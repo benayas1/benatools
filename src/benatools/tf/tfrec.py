@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
 import os
+import sys
+import pandas as pd
 
 def bytes_feature(value):
     """Returns a bytes_list from a string / byte."""
@@ -47,13 +49,11 @@ def serialize_example(data, label):
     example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
     return example_proto.SerializeToString()
 
-def _write_tfrec_file(file_list,
-                      label_list,
+def _write_tfrec_file(data,
                       folder,
                       file_index,
                       serialize_fn,
                       max_bytes=200*1024*1024,
-                      loader_fn=np.load,
                       file_prefix='file_',
                       dtype=np.int8,
                       zfill=5,
@@ -64,10 +64,8 @@ def _write_tfrec_file(file_list,
 
     Parameters
     ----------
-    file_list : list
-        A list of paths to be encoded into the tfrec file
-    labels : list
-        A list of labels
+    data : np.array
+        A 2D array
     folder : str
         Folder to store the tf record
     file_index : int
@@ -76,8 +74,6 @@ def _write_tfrec_file(file_list,
         Function to convert a single file into a tf.Example. Signature is (data, label)
     max_bytes : int
         Maximum size in bytes
-    loader_fn : function, Optional
-        Function to load a file. Could be np.load if format is npy
     file_prefix : str, Optional
         Prefix to include to the file name
     dtype : dtype, Optional
@@ -87,18 +83,15 @@ def _write_tfrec_file(file_list,
     verbose : bool
         Whether to output messages or not
     """
-    assert len(file_list) == len(label_list); "file_list and label_list must be the same length"
 
     n_bytes, n_files = 0, 0
     tmp = folder + '/tmp.tfrec'
     with tf.io.TFRecordWriter(tmp) as writer:
-        for d in list(zip(file_list, label_list)):
-            data = loader_fn(d[0]).astype(dtype)
-            label = d[1]
-            example = serialize_fn(data, label)
+        for d in data:
+            example = serialize_fn(d)
             writer.write(example)
 
-            n_bytes += data.nbytes
+            n_bytes += sys.getsizeof(example)
             n_files += 1
 
             # break execution if files surpasses max number of bytes
@@ -114,13 +107,11 @@ def _write_tfrec_file(file_list,
 
     return n_files
 
-def convert(file_list,
-            label_list,
+def convert(data,
             folder='tfrecords',
             file_prefix='file_',
             serialize_fn=serialize_example,
             max_mb=200,
-            loader_fn=np.load,
             dtype=np.int8,
             zfill=5,
             verbose=True
@@ -130,10 +121,8 @@ def convert(file_list,
 
     Parameters
     ----------
-    file_list : list
-        A list of paths to be encoded into the tfrec file
-    label_list : list
-        A list of labels
+    data : np.array or pd.DataFrame
+        A 2D object with one row per sample
     folder : str
         Folder to store the tf record
     file_prefix : str, Optional
@@ -142,8 +131,6 @@ def convert(file_list,
         Function to convert a single file into a tf.Example. Signature is (data, label)
     max_mb : int
         Maximum size in MB
-    loader_fn : function, Optional
-        Function to load a file. Could be np.load if format is npy
     dtype : dtype, Optional
         Data type to convert loaded data before serializing. For images, np.int8
     zfill : int, Optional
@@ -152,33 +139,30 @@ def convert(file_list,
         Whether to output messages or not
 
     """
-    assert len(file_list) == len(label_list); "file_list and label_list must be the same length"
-
     # Create folder
     path = os.path.join(folder)
     if not os.path.exists(path):
         os.mkdir(path)
+        
+    # Transform to numpy array. One row per sample
+    if isinstance(data, pd.DataFrame):
+        data = data.values
 
     max_output_filesize = max_mb * 1024 * 1024  # max file size in bytes
 
-    files = file_list.copy()
-    labels = label_list.copy()
     file_index=0
-    while True:
-        n = _write_tfrec_file(files,
-                              labels,
+    while len(data)>0:
+        n = _write_tfrec_file(data,
                               folder=folder,
                               file_index=file_index,
                               file_prefix=file_prefix,
                               serialize_fn=serialize_fn,
                               max_bytes=max_output_filesize,
-                              loader_fn=loader_fn,
                               dtype=dtype,
                               zfill=zfill,
                               verbose=verbose)
         file_index += 1
-        files = files[n:]
-        labels = labels[n:]
+        data = data[n:]
 
 
 def read_labeled_tfrecord(ex):

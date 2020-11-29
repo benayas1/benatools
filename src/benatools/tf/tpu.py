@@ -9,7 +9,7 @@ def _log(s, verbose):
         print(s)
 
 
-def get_device_strategy(device, verbose=True):
+def get_device_strategy(device, half=False, XLA=False, verbose=True):
     """
     Returns the distributed strategy object, the tune policy anb the number of replicas.
 
@@ -51,6 +51,16 @@ def get_device_strategy(device, verbose=True):
                 strategy = tf.distribute.TPUStrategy(tpu) if v >= '2.3.0' else tf.distribute.experimental.TPUStrategy(
                     tpu)
                 _log("TPU initialized", verbose)
+
+                if half:
+                    from tensorflow.keras.mixed_precision import experimental as mixed_precision
+                    policy = tf.keras.mixed_precision.experimental.Policy('mixed_bfloat16')
+                    mixed_precision.set_policy(policy)
+                    print('Mixed precision enabled')
+                if XLA:
+                    tf.config.optimizer.set_jit(True)
+                    print('Accelerated Linear Algebra enabled')
+
             except:
                 _log("failed to initialize TPU", verbose)
                 device = "GPU"

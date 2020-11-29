@@ -436,7 +436,7 @@ def _mixup_labels(shape, label1, label2, n_classes, a):
     return (1 - a) * lab1 + a * lab2
 
 
-def cutmix(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
+def cutmix(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_labels=None):
     """
     Cutmix randomly remove squares from training images
 
@@ -464,7 +464,6 @@ def cutmix(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
     """
 
     rank = len(batch.shape) - 2
-    batch_size = batch.shape[0]
 
     imgs = []
     labs = []
@@ -494,8 +493,10 @@ def cutmix(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
         # Make Cutmix Image
         if rank == 2:
             image = _reconstruct2D(batch[j], batch[k], xa, xb, ya, yb)
-        else:
+        elif rank == 3:
             image = _reconstruct3D(batch[j], batch[k], xa, xb, ya, yb, za, zb)
+        else:
+            raise Exception(f"Rank incorrect. Should be 2 or 3, but it is {rank}") 
         imgs.append(image)
 
         # Make Cutmix Label
@@ -505,8 +506,10 @@ def cutmix(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR (maybe use Python typing instead?)
     if rank == 2:
         image2 = tf.reshape(tf.stack(imgs), (batch_size, dimension, dimension, 3))
-    else:
+    elif rank == 3:
         image2 = tf.reshape(tf.stack(imgs), (batch_size, dimension, dimension, dimension, 3))
+    else:
+        raise Exception(f"Rank incorrect. Should be 2 or 3, but it is {rank}") 
 
     if n_labels:
         label2 = tf.reshape(tf.stack(labs), (batch_size, n_labels))
@@ -515,7 +518,7 @@ def cutmix(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
     return image2, label2
 
 
-def mixup(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
+def mixup(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_labels=None):
     """
     Mixup randomly mixes data from two samples
 
@@ -543,7 +546,7 @@ def mixup(batch, label, prob=1.0, dimension=256, n_classes=1, n_labels=None):
     """
 
     rank = len(batch.shape) - 2
-    batch_size = batch.shape[0]
+    #batch_size = batch.shape[0]
 
     imgs = []
     labs = []

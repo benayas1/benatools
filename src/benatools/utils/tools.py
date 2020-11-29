@@ -162,6 +162,7 @@ class BaseOptimizeBlend(ABC):
         float
             The score metric of all estimators with coefficients applied
         """
+        coef = coef.reshape([X.shape[0]]  + [1 for i in range(len(X.shape)-1)])
         x_coef = X * coef
         predictions = np.sum(x_coef, axis=1)
         score = sk.metrics.mean_squared_error(y, predictions)
@@ -179,7 +180,7 @@ class BaseOptimizeBlend(ABC):
             true values
         """
         partial_loss = partial(self.metric, X=X, y=y)
-        init_coef = np.random.dirichlet(np.ones(X.shape[1]))
+        init_coef = np.random.dirichlet(np.ones( X.shape[0] ))
         self._coef = fmin(partial_loss, init_coef, disp=True, maxiter=self._maxiter, maxfun=self._maxfun)
 
     def predict(self, X):
