@@ -248,7 +248,7 @@ class TorchFitter:
                         f'ETA: {(len(train_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
             # Calculate batch size
-            batch_size = data[0].shape[0]
+            batch_size = data['x'].shape[0]
 
             # Run one batch
             loss = self.train_one_batch(data)
@@ -416,13 +416,16 @@ class TorchFitter:
         if verbose:
             self.log(f'Model is saved to {path}')
         self.model.eval()
-        torch.save({
+
+        data = {
                 'model_state_dict': self.model.state_dict(),
                 'optimizer_state_dict': self.optimizer.state_dict(),
-                'scheduler_state_dict': self.scheduler.state_dict(),
                 'best_summary_loss': self.best_metric,
                 'epoch': self.epoch,
-        }, path)
+        }
+        data['scheduler_state_dict'] = self.scheduler.state_dict()
+
+        torch.save(data, path)
 
     def load(self, path):
         """
@@ -436,9 +439,12 @@ class TorchFitter:
         checkpoint = torch.load(path)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        
         self.best_metric = checkpoint['best_summary_loss']
         self.epoch = checkpoint['epoch'] + 1
+
+        if 'scheduler_state_dict' in checkpoint:
+            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
     def log(self, message):
         """
