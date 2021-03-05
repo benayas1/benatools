@@ -10,7 +10,7 @@ from shutil import rmtree
 from setuptools import find_packages, setup, Command
 from setuptools.command.test import test as TestCommand
 
-print('Test')
+
 # Package meta-data.
 NAME = 'benatools'
 DESCRIPTION = 'Utilities package for XGBoost, CatBoost, LightGBM, Tensorflow and Pytorch'
@@ -18,7 +18,7 @@ URL = 'https://github.com/benayas1/benatools'
 EMAIL = 'benayas1@gmail.com'
 AUTHOR = 'Alberto Benayas'
 REQUIRES_PYTHON = '>=3.6.0'
-VERSION = '0.0.97'
+VERSION = '0.0.100'
 
 # What packages are required for this module to be executed?
 requirements = [

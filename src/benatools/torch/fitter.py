@@ -119,12 +119,13 @@ class TorchFitter:
 
     def fit(self, 
             train_loader, 
-            val_loader, 
+            val_loader=None, 
             n_epochs=1, 
             metric=None, 
             metric_kwargs={}, 
             early_stopping=0, 
-            early_stopping_mode='min', 
+            early_stopping_mode='min',
+            early_stoppping_alpha=0.0,
             save_checkpoint=True,
             verbose_steps=0):
         """ Fits a model
@@ -169,27 +170,33 @@ class TorchFitter:
             t = time.time()
             train_summary_loss = self.train_one_epoch(train_loader, verbose_steps=verbose_steps)
             history['train'] = train_summary_loss.avg  # training loss
+            history['lr'] = self.optimizer.param_groups[0]['lr']
 
             # Save checkpoint
             if save_checkpoint:
                 self.save(f'{self.base_dir}/last-checkpoint.bin', False)
 
-            # Run epoch validation
-            val_summary_loss, calculated_metric = self.validation(val_loader, metric=metric, metric_kwargs=metric_kwargs, verbose_steps=verbose_steps)
-            history['val'] = val_summary_loss.avg  # validation loss
-            history['lr'] = self.optimizer.param_groups[0]['lr']
+            if val_loader is not None:
+                # Run epoch validation
+                val_summary_loss, calculated_metric = self.validation(val_loader, metric=metric, metric_kwargs=metric_kwargs, verbose_steps=verbose_steps)
+                history['val'] = val_summary_loss.avg  # validation loss
 
-            metric_log = f'- metric {calculated_metric},' if calculated_metric else ''
-            self.log(f'\r[RESULT] {(time.time() - t):.2f}s - train loss: {train_summary_loss.avg:.5f} - val loss: {val_summary_loss.avg:.5f} ' + metric_log)
+                # Write log
+                metric_log = f'- metric {calculated_metric},' if calculated_metric else ''
+                self.log(f'\r[RESULT] {(time.time() - t):.2f}s - train loss: {train_summary_loss.avg:.5f} - val loss: {val_summary_loss.avg:.5f} ' + metric_log)
 
-            if calculated_metric:
-                history['val_metric'] = calculated_metric
+                if calculated_metric:
+                    history['val_metric'] = calculated_metric
+    
+                calculated_metric = calculated_metric if calculated_metric else val_summary_loss.avg
+            else:
+                # If no validation is provided, training loss is used as metric
+                calculated_metric = train_summary_loss.avg
 
             # Check if result is improved, then save model
-            calculated_metric = calculated_metric if calculated_metric else val_summary_loss.avg
             if (((metric) and
-                    (((early_stopping_mode == 'max') and (calculated_metric > self.best_metric)) or
-                    ((early_stopping_mode == 'min') and (calculated_metric < self.best_metric))))
+                    (((early_stopping_mode == 'max') and (calculated_metric - early_stoppping_alpha > self.best_metric)) or
+                    ((early_stopping_mode == 'min') and (calculated_metric + early_stoppping_alpha < self.best_metric))))
                 or
                 ((metric is None) and (calculated_metric < self.best_metric))):
                     self.log(f'Validation metric improved from {self.best_metric} to {calculated_metric}')
@@ -209,7 +216,7 @@ class TorchFitter:
                 break
 
             # Scheduler step after validation
-            if self.validation_scheduler:
+            if self.validation_scheduler and self.scheduler is not None:
                 self.scheduler.step(metrics=calculated_metric)
 
             training_history.append(history)
@@ -257,7 +264,8 @@ class TorchFitter:
 
             self.optimizer.step()
 
-            if self.step_scheduler:
+            # LR Scheduler step after epoch
+            if self.step_scheduler and self.scheduler is not None:
                 self.scheduler.step()
 
         self.log(f'\r[TRAIN] {(time.time() - t):.2f}s - train loss: {summary_loss.avg:.5f}')
@@ -423,7 +431,9 @@ class TorchFitter:
                 'best_summary_loss': self.best_metric,
                 'epoch': self.epoch,
         }
-        data['scheduler_state_dict'] = self.scheduler.state_dict()
+
+        if self.scheduler is not None:
+            data['scheduler_state_dict'] = self.scheduler.state_dict()
 
         torch.save(data, path)
 
@@ -445,6 +455,27 @@ class TorchFitter:
 
         if 'scheduler_state_dict' in checkpoint:
             self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+
+    def load_model_weights(path, model):
+        """
+        Static method that loads weights into a model
+
+        Parameters
+        ----------
+        path : str
+            path containing the weights. Normally a .bin file
+        model : torch.nn.Module
+            Module to load the weights on
+
+        Returns
+        -------
+        torch.nn.Module
+            The inputed model with loaded weights
+        """
+
+        checkpoint = torch.load(path)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        return model
 
     def log(self, message):
         """
