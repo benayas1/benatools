@@ -125,7 +125,8 @@ class TorchFitter:
             metric_kwargs={}, 
             early_stopping=0, 
             early_stopping_mode='min',
-            early_stoppping_alpha=0.0,
+            early_stopping_alpha=0.0,
+            early_stopping_pct=0.0,
             save_checkpoint=True,
             verbose_steps=0):
         """ Fits a model
@@ -146,6 +147,10 @@ class TorchFitter:
             Early stopping epochs
         early_stopping_mode : str
             Min or max criteria
+        early_stopping_alpha : float
+            Value that indicates how much to improve to consider early stopping
+        early_stopping_pct : float
+            Value between 0 and 1 that indicates how much to improve to consider early stopping
         save_checkpoint : bool
             Whether to save the checkpoint when training
         verbose_steps : int, defaults to 0
@@ -157,6 +162,10 @@ class TorchFitter:
         """
         self.best_metric = 10 ** 7 if early_stopping_mode == 'min' else -10 ** 7
 
+        # Use the same train loader for validation. A possible use case is for autoencoders
+        if isinstance(val_loader, str) and val_loader == 'training':
+            val_loader = train_loader
+
         training_history = []
         es_epochs = 0
         for e in range(n_epochs):
@@ -164,7 +173,7 @@ class TorchFitter:
 
             # Update log
             lr = self.optimizer.param_groups[0]['lr']
-            self.log(f'\n{datetime.utcnow().isoformat()}\nEPOCH {str(self.epoch+1)}/{str(n_epochs)} - LR: {lr}')
+            self.log(f'\n{datetime.utcnow().isoformat(" ", timespec="seconds")}\nEPOCH {str(self.epoch+1)}/{str(n_epochs)} - LR: {lr}')
 
             # Run one training epoch
             t = time.time()
@@ -193,12 +202,15 @@ class TorchFitter:
                 # If no validation is provided, training loss is used as metric
                 calculated_metric = train_summary_loss.avg
 
+            es_pct = early_stopping_pct * self.best_metric
+
             # Check if result is improved, then save model
             if (((metric) and
-                    (((early_stopping_mode == 'max') and (calculated_metric - early_stoppping_alpha > self.best_metric)) or
-                    ((early_stopping_mode == 'min') and (calculated_metric + early_stoppping_alpha < self.best_metric))))
+                    (((early_stopping_mode == 'max') and (calculated_metric - max(early_stopping_alpha, es_pct) > self.best_metric)) or
+                     ((early_stopping_mode == 'min') and (calculated_metric + max(early_stopping_alpha, es_pct) < self.best_metric))))
                 or
-                ((metric is None) and (calculated_metric < self.best_metric))):
+                ((metric is None) and (calculated_metric + max(early_stopping_alpha, es_pct) < self.best_metric))):
+
                     self.log(f'Validation metric improved from {self.best_metric} to {calculated_metric}')
                     self.best_metric = calculated_metric
                     self.model.eval()
