@@ -103,7 +103,6 @@ class TorchFitter:
             os.makedirs(self.base_dir)
 
         self.log_path = f'{self.base_dir}/log.txt'
-        self.best_metric = 0
 
         self.model = model
         self.device = device
@@ -160,10 +159,12 @@ class TorchFitter:
         -------
         returns a pandas DataFrame object with training history
         """
-        self.best_metric = 10 ** 7 if early_stopping_mode == 'min' else -10 ** 7
+        # If attribute best_metric exists is because there has been some training before
+        if not hasattr(self, 'best_metric'):
+            self.best_metric = 10 ** 7 if early_stopping_mode == 'min' else -10 ** 7
 
         # Use the same train loader for validation. A possible use case is for autoencoders
-        if isinstance(val_loader, str) and val_loader == 'training':
+        if isinstance(val_loader, str) and 'train' in val_loader:
             val_loader = train_loader
 
         training_history = []
@@ -203,13 +204,14 @@ class TorchFitter:
                 calculated_metric = train_summary_loss.avg
 
             es_pct = early_stopping_pct * self.best_metric
+            alpha = max(early_stopping_alpha, es_pct)
 
             # Check if result is improved, then save model
             if (((metric) and
-                    (((early_stopping_mode == 'max') and (calculated_metric - max(early_stopping_alpha, es_pct) > self.best_metric)) or
-                     ((early_stopping_mode == 'min') and (calculated_metric + max(early_stopping_alpha, es_pct) < self.best_metric))))
+                    (((early_stopping_mode == 'max') and (calculated_metric - alpha > self.best_metric)) or
+                     ((early_stopping_mode == 'min') and (calculated_metric + alpha < self.best_metric))))
                 or
-                ((metric is None) and (calculated_metric + max(early_stopping_alpha, es_pct) < self.best_metric))):
+                ((metric is None) and (calculated_metric + alpha < self.best_metric))):
 
                     self.log(f'Validation metric improved from {self.best_metric} to {calculated_metric}')
                     self.best_metric = calculated_metric
@@ -317,6 +319,11 @@ class TorchFitter:
         # Output and loss
         output = self.model(x)
         loss = self.loss_function(output, y)
+
+        # Apply sample weights if existing
+        if 'w' in data:
+            w = data['w']
+            loss = loss * w
 
         # backpropagation
         loss.backward()
