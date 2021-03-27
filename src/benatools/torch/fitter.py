@@ -98,7 +98,7 @@ class TorchFitter:
         self.epoch = 0  # current epoch
         self.verbose = verbose
 
-        self.base_dir = f'./{folder}'
+        self.base_dir = folder
         if not os.path.exists(self.base_dir):
             os.makedirs(self.base_dir)
 
@@ -186,13 +186,14 @@ class TorchFitter:
             if save_checkpoint:
                 self.save(f'{self.base_dir}/last-checkpoint.bin', False)
 
+            # Run validation in val_loader is present
             if val_loader is not None:
                 # Run epoch validation
                 val_summary_loss, calculated_metric = self.validation(val_loader, metric=metric, metric_kwargs=metric_kwargs, verbose_steps=verbose_steps)
                 history['val'] = val_summary_loss.avg  # validation loss
 
                 # Write log
-                metric_log = f'- metric {calculated_metric},' if calculated_metric else ''
+                metric_log = f'- {metric.__name__} {calculated_metric},' if calculated_metric else ''
                 self.log(f'\r[RESULT] {(time.time() - t):.2f}s - train loss: {train_summary_loss.avg:.5f} - val loss: {val_summary_loss.avg:.5f} ' + metric_log)
 
                 if calculated_metric:
@@ -385,7 +386,7 @@ class TorchFitter:
                     y_preds += output.cpu().numpy().tolist()
 
         calculated_metric = metric(y_true, y_preds, **metric_kwargs) if metric else None
-        metric_log = f'- metric {calculated_metric},' if calculated_metric else ''
+        metric_log = f'- {metric.__name__} {calculated_metric},' if calculated_metric else ''
         self.log(f'\r[VALIDATION] {(time.time() - t):.2f}s - val. loss: {summary_loss.avg:.5f} ' + metric_log)
         return summary_loss, calculated_metric
 
