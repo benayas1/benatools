@@ -51,41 +51,33 @@ class AverageMeter(object):
 class TorchFitterBase:
     """
     Helper class to implement a training loop in PyTorch
-    Parameters
-    ----------
-    model : torch.nn.Module
-        Model to be fitted
-    device : int
-        device can be cuda or cpu
-    loss : torch.nn.loss object or function returning
-        DataFrame to split
-    optimizer : torch.optim object
-        Optimizer object
-    schedule :
-        Scheduler object
-    validation schedule :
-        Scheduler object for the validation step
-    step_scheduler=False:
-    folder : str
-        Optional, folder where to store checkpoints
-    verbose : bool
-        Whether to print outputs or not
-    log_file : bool
-        whether to write the log in log.txt or not
     """
 
     def __init__(self,
-                 model,
-                 device,
-                 loss,
-                 optimizer,
-                 scheduler=None,
-                 validation_scheduler=True,
-                 step_scheduler=False,
-                 folder='models',
-                 verbose=True,
-                 save_log=True,
+                 model:torch.nn.Module,
+                 device:str,
+                 loss:torch.nn.Module,
+                 optimizer:torch.optim,
+                 scheduler:torch.optim.lr_scheduler = None,
+                 validation_scheduler:bool = True,
+                 step_scheduler:bool = False,
+                 folder:str = 'models',
+                 verbose:bool = True,
+                 save_log:bool = True,
                  ):
+        """
+        Args:
+            model (torch.nn.Module): Model to be fitted
+            device (str): Device can be cuda or cpu
+            loss (torch.nn.Module): DataFrame to split
+            optimizer (torch.optim): Optimizer object
+            scheduler (torch.optim.lr_scheduler, optional): Scheduler object. Defaults to None.
+            validation_scheduler (bool, optional): Run scheduler step on the validation step. Defaults to True.
+            step_scheduler (bool, optional): Run scheduler step on every training step. Defaults to False.
+            folder (str, optional): Folder where to store checkpoints. Defaults to 'models'.
+            verbose (bool, optional): Whether to print outputs or not. Defaults to True.
+            save_log (bool, optional): Whether to write the log in log.txt or not. Defaults to True.
+        """
 
         if type(loss) == type:
             self.loss_function = loss()
@@ -113,7 +105,7 @@ class TorchFitterBase:
         self.step_scheduler = step_scheduler  # do scheduler.step after optimizer.step
         self.log(f'Fitter prepared. Device is {self.device}')
 
-    def _unpack(self, data):
+    def unpack(self, data):
         raise NotImplementedError('This class is a base class')
 
     def reduce_loss(self, loss, weights):
@@ -128,47 +120,43 @@ class TorchFitterBase:
         return loss
 
     def fit(self,
-            train_loader,
-            val_loader=None,
-            n_epochs=1,
-            metric=None,
-            metric_kwargs={},
-            early_stopping=0,
-            early_stopping_mode='min',
-            early_stopping_alpha=0.0,
-            early_stopping_pct=0.0,
-            save_checkpoint=True,
-            verbose_steps=0):
-        """ Fits a model
-        Parameters
-        ----------
-        train_loader : torch.utils.data.DataLoader
-            Training data
-        val_loader : torch.utils.data.DataLoader
-            Validation Data
-        n_epochs : int
-            Maximum number of epochs to train
-        metric : function with (y_true, y_pred, **metric_kwargs) signature
-            Metric to evaluate results on
-        metric_kwargs : dict
-            Arguments for the passed metric. Ignored if metric is None
-        early_stopping : int
-            Early stopping epochs
-        early_stopping_mode : str
-            Min or max criteria
-        early_stopping_alpha : float
-            Value that indicates how much to improve to consider early stopping
-        early_stopping_pct : float
-            Value between 0 and 1 that indicates how much to improve to consider early stopping
-        save_checkpoint : bool
-            Whether to save the checkpoint when training
-        verbose_steps : int, defaults to 0
-            number of step to print every training summary
-        Returns
-        -------
-        returns a pandas DataFrame object with training history
+            train_loader:torch.utils.data.DataLoader, 
+            val_loader:torch.utils.data.DataLoader = None,
+            n_epochs:int = 1,
+            metric = None,
+            metric_kwargs:dict = {},
+            early_stopping:int = 0,
+            early_stopping_mode:str ='min',
+            early_stopping_alpha:float = 0.0,
+            early_stopping_pct:float = 0.0,
+            save_checkpoint:bool = False,
+            save_best_checkpoint:bool = True,
+            verbose_steps:int = 0):
         """
-        self.best_metric = np.inf if early_stopping_mode == 'min' else -np.inf
+        Fits a model
+
+        Args:
+            train_loader (torch.utils.data.DataLoader): Training data
+            val_loader (torch.utils.data.DataLoader, optional): Validation Data. Defaults to None.
+            n_epochs (int, optional): Maximum number of epochs to train. Defaults to 1.
+            metric ( function with (y_true, y_pred, **metric_kwargs) signature, optional): Metric to evaluate results on. Defaults to None.
+            metric_kwargs (dict, optional): Arguments for the passed metric. Ignored if metric is None. Defaults to {}.
+            early_stopping (int, optional): Early stopping epochs. Defaults to 0.
+            early_stopping_mode (str, optional): Min or max criteria. Defaults to 'min'.
+            early_stopping_alpha (float, optional): Value that indicates how much to improve to consider early stopping. Defaults to 0.0.
+            early_stopping_pct (float, optional): Value between 0 and 1 that indicates how much to improve to consider early stopping. Defaults to 0.0.
+            save_checkpoint (bool, optional): Whether to save the checkpoint when training. Defaults to False.
+            save_best_checkpoint (bool, optional): Whether to save the best checkpoint when training. Defaults to True.
+            verbose_steps (int, optional): Number of step to print every training summary. Defaults to 0.
+
+        Returns:
+            pd.DataFrame: DataFrame containing training history
+        """
+
+        if self.best_metric == 0.0:
+            self.best_metric = np.inf if early_stopping_mode == 'min' else -np.inf
+
+        initial_epochs = self.epoch
 
         # Use the same train loader for validation. A possible use case is for autoencoders
         if isinstance(val_loader, str) and val_loader == 'training':
@@ -182,7 +170,7 @@ class TorchFitterBase:
             # Update log
             lr = self.optimizer.param_groups[0]['lr']
             self.log(f'\n{datetime.utcnow().isoformat(" ", timespec="seconds")}\n \
-                        EPOCH {str(self.epoch+1)}/{str(n_epochs)} - LR: {lr}')
+                        EPOCH {str(self.epoch+1)}/{str(n_epochs+initial_epochs)} - LR: {lr}')
 
             # Run one training epoch
             t = time.time()
@@ -218,17 +206,21 @@ class TorchFitterBase:
             es_pct = early_stopping_pct * self.best_metric
 
             # Check if result is improved, then save model
-            if (((metric) and
-                    (((early_stopping_mode == 'max') and
-                      (calculated_metric - max(early_stopping_alpha, es_pct) > self.best_metric)) or
-                     ((early_stopping_mode == 'min') and
-                      (calculated_metric + max(early_stopping_alpha, es_pct) < self.best_metric))))
-                or
-                    ((metric is None) and (calculated_metric + max(early_stopping_alpha, es_pct) < self.best_metric))):
+            if (
+                ((metric) and
+                 (
+                  ((early_stopping_mode == 'max') and (calculated_metric - max(early_stopping_alpha, es_pct) > self.best_metric)) or
+                  ((early_stopping_mode == 'min') and (calculated_metric + max(early_stopping_alpha, es_pct) < self.best_metric))
+                 )
+                ) or
+                ((metric is None) and 
+                 (calculated_metric + max(early_stopping_alpha, es_pct) < self.best_metric) # the standard case is to minimize
+                )
+               ):
                 self.log(f'Validation metric improved from {self.best_metric} to {calculated_metric}')
                 self.best_metric = calculated_metric
                 self.model.eval()
-                if save_checkpoint:
+                if save_best_checkpoint:
                     savepath = f'{self.base_dir}/best-checkpoint.bin'
                     self.save(savepath)
                 es_epochs = 0  # reset early stopping count
@@ -255,7 +247,7 @@ class TorchFitterBase:
         Run one epoch on the train dataset
         Parameters
         ----------
-        train_loader : torch.DataLoader
+        train_loader : torch.data.utils.DataLoader
             DataLoaders containing the training dataset
         verbose_steps : int, defaults to 0
             number of step to print every training summary
@@ -267,6 +259,7 @@ class TorchFitterBase:
         self.model.train()  # set train mode
         summary_loss = AverageMeter()  # object to track the average loss
         t = time.time()
+        batch_size = train_loader.batch_size
 
         # run epoch
         for step, data in enumerate(train_loader):
@@ -279,7 +272,7 @@ class TorchFitterBase:
                         f'ETA: {(len(train_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
             # Unpack batch of data
-            x, y, w, batch_size = self._unpack(data)
+            x, y, w = self.unpack(data)
 
             # Run one batch
             loss = self.train_one_batch(x, y, w)
@@ -359,6 +352,7 @@ class TorchFitterBase:
         summary_loss = AverageMeter()
         y_preds = []
         y_true = []
+        batch_size = val_loader.batch_size
 
         t = time.time()
         for step, data in enumerate(val_loader):
@@ -371,7 +365,7 @@ class TorchFitterBase:
                         f'ETA: {(len(val_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
             with torch.no_grad():  # no gradient update
-                x, y, w, batch_size = self._unpack(data)
+                x, y, w = self.unpack(data)
 
                 if metric:
                     y_true += y.cpu().numpy().tolist()
@@ -426,7 +420,7 @@ class TorchFitterBase:
                         f'ETA: {(len(test_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
             with torch.no_grad():  # no gradient update
-                x, _, _, _ = self._unpack(data)
+                x, _, _ = self.unpack(data)
 
                 # Output
                 if isinstance(x, tuple) or isinstance(x, list):
@@ -443,13 +437,12 @@ class TorchFitterBase:
     def save(self, path, verbose=True):
         """
         Save model and other metadata
-        Parameters
-        ----------
-        path : str
-            Path of the file to be saved
-        verbose : int
-            1 = print logs, 0 = silence
+
+        Args:
+            path (str): Path of the file to be saved
+            verbose (bool, optional): True = print logs, False = silence. Defaults to True.
         """
+
         if verbose:
             self.log(f'Model is saved to {path}')
         self.model.eval()
@@ -469,38 +462,41 @@ class TorchFitterBase:
 
         torch.save(data, path)
 
-    def load(self, path):
+    def load(self, path, only_model=False):
         """
         Load model and other metadata
-        Parameters
-        ----------
-        path : str
-            Path of the file to be loaded
+
+        Args:
+            path (str): Path of the file to be loaded
+            only_model (bool, optional): Whether to load just the model weights. Defaults to False.
         """
         checkpoint = torch.load(path)
+
         self.model.load_state_dict(checkpoint['model_state_dict'])
+
+        if only_model:
+            return
+
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
         self.best_metric = checkpoint['best_summary_loss']
         self.epoch = checkpoint['epoch'] + 1
 
-        if 'scheduler_state_dict' in checkpoint:
+        if 'scheduler_state_dict' in checkpoint and self.scheduler is not None:
             self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+
 
     @staticmethod
     def load_model_weights(path, model):
         """
-        Static method that loads weights into a model
-        Parameters
-        ----------
-        path : str
-            path containing the weights. Normally a .bin file
-        model : torch.nn.Module
-            Module to load the weights on
-        Returns
-        -------
-        torch.nn.Module
-            The input model with loaded weights
+        Static method that loads weights into a torch module
+
+        Args:
+            path (str): Path containing the weights. Normally a .bin or .tar file
+            model (torch.nn.Module): Module to load the weights on
+
+        Returns:
+            torch.nn.Module: The input model with loaded weights
         """
 
         checkpoint = torch.load(path)
@@ -510,10 +506,9 @@ class TorchFitterBase:
     def log(self, message):
         """
         Log training ouput into console and file
-        Parameters
-        ----------
-        message : str
-            Message to be logged
+
+        Args:
+            message (str): Message to be logged
         """
         if self.verbose:
             print(message)
@@ -527,7 +522,7 @@ class TorchFitterBase:
 
 class AutoencoderFitter(TorchFitterBase):
 
-    def _unpack(self, data):
+    def unpack(self, data):
         # extract x and y from the dataloader
         x = data['x']
 
@@ -535,9 +530,6 @@ class AutoencoderFitter(TorchFitterBase):
         x = x.to(self.device)
         x = x.float()
 
-        # calculate batch size
-        batch_size = x.shape[0]
-
         if 'w' in data:
             w = data['w']
             w = w.to(self.device)
@@ -545,25 +537,34 @@ class AutoencoderFitter(TorchFitterBase):
         else:
             w = None
 
-        return x, x, w, batch_size
+        return x, x, w
 
 
 class TransformersFitter(TorchFitterBase):
 
-    def _unpack(self, data):
-        x = data['x']
-        inputs, masks = x['input_ids'], x['attention_mask']
-        inputs = inputs.squeeze().to(self.device).int()
-        masks = masks.squeeze().to(self.device).int()
+    def unpack(self, data):
+        x = {k: v.to(self.device) for k, v in data['x'].items()}
 
         y = data['y'].to(self.device)
-        batch_size = inputs.shape[0]
 
         if 'w' in data:
-            w = data['w']
-            w = w.to(self.device)
-            w = w.float()
+            w = data['w'].to(self.device).float()
         else:
             w = None
 
-        return [inputs, masks], y, w, batch_size
+        return x, y, w
+
+
+class MultiTaskFitter(TorchFitterBase):
+
+    def unpack(self, data):
+        x = {k: v.to(self.device) for k, v in data['x'].items()}
+
+        y = [e.to(self.device) for e in data['y']]
+
+        if 'w' in data:
+            w = data['w'].to(self.device).float()
+        else:
+            w = None
+
+        return x, y, w
