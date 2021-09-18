@@ -4,6 +4,7 @@ import numpy as np
 from datetime import datetime
 import time
 import pandas as pd
+from typing import Iterable, Callable, Dict, Tuple
 
 
 class AverageMeter(object):
@@ -54,16 +55,16 @@ class TorchFitterBase:
     """
 
     def __init__(self,
-                 model:torch.nn.Module,
-                 device:str,
-                 loss:torch.nn.Module,
-                 optimizer:torch.optim,
-                 scheduler:torch.optim.lr_scheduler = None,
-                 validation_scheduler:bool = True,
-                 step_scheduler:bool = False,
-                 folder:str = 'models',
-                 verbose:bool = True,
-                 save_log:bool = True,
+                 model: torch.nn.Module,
+                 device: str,
+                 loss: torch.nn.Module,
+                 optimizer: torch.optim,
+                 scheduler: torch.optim.lr_scheduler = None,
+                 validation_scheduler: bool = True,
+                 step_scheduler: bool = False,
+                 folder: str = 'models',
+                 verbose: bool = True,
+                 save_log: bool = True,
                  ):
         """
         Args:
@@ -120,18 +121,18 @@ class TorchFitterBase:
         return loss
 
     def fit(self,
-            train_loader:torch.utils.data.DataLoader, 
-            val_loader:torch.utils.data.DataLoader = None,
-            n_epochs:int = 1,
-            metric = None,
-            metric_kwargs:dict = {},
-            early_stopping:int = 0,
-            early_stopping_mode:str ='min',
-            early_stopping_alpha:float = 0.0,
-            early_stopping_pct:float = 0.0,
-            save_checkpoint:bool = False,
-            save_best_checkpoint:bool = True,
-            verbose_steps:int = 0):
+            train_loader: torch.utils.data.DataLoader,
+            val_loader: torch.utils.data.DataLoader = None,
+            n_epochs: int = 1,
+            metrics: Iterable[Tuple[Callable[[Iterable, Iterable], float], dict]] = None,
+            early_stopping: int = 0,
+            early_stopping_mode: str = 'min',
+            early_stopping_alpha: float = 0.0,
+            early_stopping_pct: float = 0.0,
+            save_checkpoint: bool = False,
+            save_best_checkpoint: bool = True,
+            verbose_steps: int = 0,
+            callbacks: Iterable[Callable[[Dict], None]] = None):
         """
         Fits a model
 
@@ -148,6 +149,7 @@ class TorchFitterBase:
             save_checkpoint (bool, optional): Whether to save the checkpoint when training. Defaults to False.
             save_best_checkpoint (bool, optional): Whether to save the best checkpoint when training. Defaults to True.
             verbose_steps (int, optional): Number of step to print every training summary. Defaults to 0.
+            callbacks (list of callable, optional): List of callback functions to be called after an epoch
 
         Returns:
             pd.DataFrame: DataFrame containing training history
@@ -184,21 +186,22 @@ class TorchFitterBase:
 
             if val_loader is not None:
                 # Run epoch validation
-                val_summary_loss, calculated_metric = self.validation(val_loader,
-                                                                      metric=metric,
-                                                                      metric_kwargs=metric_kwargs,
-                                                                      verbose_steps=verbose_steps)
+                val_summary_loss, calculated_metrics = self.validation(val_loader,
+                                                                       metric=metrics,
+                                                                       #metric_kwargs=metric_kwargs,
+                                                                       verbose_steps=verbose_steps)
                 history['val'] = val_summary_loss.avg  # validation loss
 
                 # Write log
-                metric_log = f'- metric {calculated_metric},' if calculated_metric else ''
+                metric_log = ' - ' + ' - '.join([f'{fname}: {value}' for value, fname in calculated_metrics]) if calculated_metrics else ''
                 self.log(f'\r[RESULT] {(time.time() - t):.2f}s - train loss: {train_summary_loss.avg:.5f} - \
-                           val loss: {val_summary_loss.avg:.5f} ' + metric_log)
+                           val loss: {val_summary_loss.avg:.5f}' + metric_log)
 
-                if calculated_metric:
-                    history['val_metric'] = calculated_metric
+                if calculated_metrics:
+                    history.update({fname: value for value, fname in calculated_metrics})
+                    #history['val_metric'] = calculated_metrics
 
-                calculated_metric = calculated_metric if calculated_metric else val_summary_loss.avg
+                calculated_metric = calculated_metrics[0][0] if calculated_metrics else val_summary_loss.avg
             else:
                 # If no validation is provided, training loss is used as metric
                 calculated_metric = train_summary_loss.avg
@@ -207,13 +210,13 @@ class TorchFitterBase:
 
             # Check if result is improved, then save model
             if (
-                ((metric) and
+                ((metrics) and
                  (
                   ((early_stopping_mode == 'max') and (calculated_metric - max(early_stopping_alpha, es_pct) > self.best_metric)) or
                   ((early_stopping_mode == 'min') and (calculated_metric + max(early_stopping_alpha, es_pct) < self.best_metric))
                  )
                 ) or
-                ((metric is None) and 
+                ((metrics is None) and
                  (calculated_metric + max(early_stopping_alpha, es_pct) < self.best_metric) # the standard case is to minimize
                 )
                ):
@@ -226,6 +229,13 @@ class TorchFitterBase:
                 es_epochs = 0  # reset early stopping count
             else:
                 es_epochs += 1  # increase epoch count with no improvement, for early stopping check
+
+            # Callbacks receive the history dict of this epoch
+            if callbacks is not None:
+                if not isinstance(callbacks, list):
+                    callbacks = [callbacks]
+                for c in callbacks:
+                    c(history)
 
             # Check if Early Stopping condition is met
             if (early_stopping > 0) & (es_epochs >= early_stopping):
@@ -296,17 +306,14 @@ class TorchFitterBase:
         - extract x and y (labels)
         - calculate output and loss
         - backpropagate
-        Parameters
-        ----------
-        data : Tuple of torch.Tensor
-            Batch of data. Normally the first element is the data (X) and the second is the label (y),
-            but it depends on what the Dataset outputs.
-        Returns
-        -------
-        torch.Tensor
-            A tensor with the calculated loss
-        int
-            The batch size
+
+        Args:
+            x (List or Tuple or Dict): Data
+            y (torch.Tensor): Labels
+            w (torch.Tensor, optional): Weights. Defaults to None.
+
+        Returns:
+            torch.Tensor: A tensor with the calculated loss
         """
         self.optimizer.zero_grad()
 
@@ -387,10 +394,20 @@ class TorchFitterBase:
                 if metric:
                     y_preds += output.cpu().numpy().tolist()
 
-        calculated_metric = metric(y_true, np.argmax(y_preds, axis=1), **metric_kwargs) if metric else None
-        metric_log = f'- metric {calculated_metric},' if calculated_metric else ''
+        # Callback metrics
+        metric_log = ''
+        if metric:
+            calculated_metrics = []
+            y_pred = np.argmax(y_preds, axis=1)
+            for f, args in metric:
+                value = f(y_true, y_pred, **args)
+                calculated_metrics.append((value, f.__name__))
+                metric_log += f'- {f.__name__} {value:.5f} '
+        else:
+            calculated_metrics = None
+
         self.log(f'\r[VALIDATION] {(time.time() - t):.2f}s - val. loss: {summary_loss.avg:.5f} ' + metric_log)
-        return summary_loss, calculated_metric
+        return summary_loss, calculated_metrics
 
     def predict(self, test_loader, verbose_steps=0):
         """
@@ -485,7 +502,6 @@ class TorchFitterBase:
         if 'scheduler_state_dict' in checkpoint and self.scheduler is not None:
             self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
-
     @staticmethod
     def load_model_weights(path, model):
         """
@@ -519,6 +535,23 @@ class TorchFitterBase:
             with open(self.log_path, 'a+') as logger:
                 logger.write(f'{message}\n')
 
+
+class ImageFitter(TorchFitterBase):
+
+    def unpack(self, data):
+        # extract x and y from the dataloader
+        x = data['x'].to(self.device)
+        y = data['y'].to(self.device)
+
+        # weights if existing
+        if 'w' in data:
+            w = data['w']
+            w = w.to(self.device)
+            w = w.float()
+        else:
+            w = None
+
+        return x, y, w
 
 class AutoencoderFitter(TorchFitterBase):
 
