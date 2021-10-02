@@ -65,6 +65,7 @@ class TorchFitterBase:
                  folder: str = 'models',
                  verbose: bool = True,
                  save_log: bool = True,
+                 mixed_precision: bool = True,
                  ):
         """
         Args:
@@ -98,6 +99,7 @@ class TorchFitterBase:
 
         self.model = model
         self.device = device
+        self.mixed_precision = torch.cuda.amp.GradScaler()
 
         # Optimizer object
         self.optimizer = optimizer
@@ -193,14 +195,12 @@ class TorchFitterBase:
                 # Run epoch validation
                 val_summary_loss, calculated_metrics = self.validation(val_loader,
                                                                        metric=metrics,
-                                                                       #metric_kwargs=metric_kwargs,
                                                                        verbose_steps=verbose_steps)
                 history['val'] = val_summary_loss.avg  # validation loss
 
                 # Write log
                 metric_log = ' - ' + ' - '.join([f'{fname}: {value}' for value, fname in calculated_metrics]) if calculated_metrics else ''
-                self.log(f'\r[RESULT] {(time.time() - t):.2f}s - train loss: {train_summary_loss.avg:.5f} - \
-                           val loss: {val_summary_loss.avg:.5f}' + metric_log)
+                self.log(f'\r[RESULT] {(time.time() - t):.2f}s - train loss: {train_summary_loss.avg:.5f} - val loss: {val_summary_loss.avg:.5f}' + metric_log)
 
                 if calculated_metrics:
                     history.update({fname: value for value, fname in calculated_metrics})
@@ -281,9 +281,9 @@ class TorchFitterBase:
             if self.verbose & (verbose_steps > 0):
                 if step % verbose_steps == 0:
                     print(
-                        f'\rTrain Step {step}/{len(train_loader)}, ' +
-                        f'summary_loss: {summary_loss.avg:.5f}, ' +
-                        f'time: {(time.time() - t):.2f} secs, ' +
+                        f'\rTrain Step {step}/{len(train_loader)} | ' +
+                        f'summary_loss: {summary_loss.avg:.5f} | ' +
+                        f'time: {(time.time() - t):.2f} secs | ' +
                         f'ETA: {(len(train_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
             # Unpack batch of data
@@ -294,7 +294,12 @@ class TorchFitterBase:
 
             summary_loss.update(loss.detach().item(), batch_size)
 
-            self.optimizer.step()
+            # update optimizer
+            if self.mixed_precision is not None:
+                self.mixed_precision.step(self.optimizer)
+                self.mixed_precision.update()
+            else:
+                self.optimizer.step()
 
             # LR Scheduler step after epoch
             if self.step_scheduler and self.scheduler is not None:
@@ -322,21 +327,40 @@ class TorchFitterBase:
         """
         self.optimizer.zero_grad()
 
-        # Output and loss
-        if isinstance(x, tuple) or isinstance(x, list):
-            output = self.model(*x)
-        elif isinstance(x, dict):
-            output = self.model(**x)
+        if self.mixed_precision:
+            with torch.cuda.amp.autocast():
+                # Output and loss
+                if isinstance(x, tuple) or isinstance(x, list):
+                    output = self.model(*x)
+                elif isinstance(x, dict):
+                    output = self.model(**x)
+                else:
+                    output = self.model(x)
+
+                loss = self.loss_function(output, y)
+
+                # Reduce loss and apply sample weights if existing
+                loss = self.reduce_loss(loss, w)
+
+            # backpropagation
+            self.mixed_precision.scale(loss).backward()
+
         else:
-            output = self.model(x)
+            # Output and loss
+            if isinstance(x, tuple) or isinstance(x, list):
+                output = self.model(*x)
+            elif isinstance(x, dict):
+                output = self.model(**x)
+            else:
+                output = self.model(x)
 
-        loss = self.loss_function(output, y)
+            loss = self.loss_function(output, y)
 
-        # Reduce loss and apply sample weights if existing
-        loss = self.reduce_loss(loss, w)
+            # Reduce loss and apply sample weights if existing
+            loss = self.reduce_loss(loss, w)
 
-        # backpropagation
-        loss.backward()
+            # backpropagation
+            loss.backward()
 
         return loss
 
@@ -375,9 +399,9 @@ class TorchFitterBase:
             if self.verbose & (verbose_steps > 0):
                 if step % verbose_steps == 0:
                     print(
-                        f'\rVal Step {step}/{len(val_loader)}, ' +
-                        f'summary_loss: {summary_loss.avg:.5f}, ' +
-                        f'time: {(time.time() - t):.2f} secs,' +
+                        f'\rVal Step {step}/{len(val_loader)} | ' +
+                        f'summary_loss: {summary_loss.avg:.5f} | ' +
+                        f'time: {(time.time() - t):.2f} secs |' +
                         f'ETA: {(len(val_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
             with torch.no_grad():  # no gradient update
@@ -404,14 +428,14 @@ class TorchFitterBase:
                     y_preds += output.cpu().numpy().tolist()
 
         # Callback metrics
-        metric_log = ''
+        metric_log = ' '*30
         if metric:
             calculated_metrics = []
             y_pred = np.argmax(y_preds, axis=1)
             for f, args in metric:
                 value = f(y_true, y_pred, **args)
                 calculated_metrics.append((value, f.__name__))
-                metric_log += f'- {f.__name__} {value:.5f} '
+                metric_log = f'- {f.__name__} {value:.5f} '
         else:
             calculated_metrics = None
 
@@ -444,8 +468,8 @@ class TorchFitterBase:
             if self.verbose & (verbose_steps > 0) > 0:
                 if step % verbose_steps == 0:
                     print(
-                        f'\rPrediction Step {step}/{len(test_loader)}, ' +
-                        f'time: {(time.time() - t):.2f} secs,' +
+                        f'\rPrediction Step {step}/{len(test_loader)} | ' +
+                        f'time: {(time.time() - t):.2f} secs |' +
                         f'ETA: {(len(test_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
             with torch.no_grad():  # no gradient update
