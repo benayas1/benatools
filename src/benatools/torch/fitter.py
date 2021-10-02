@@ -340,7 +340,7 @@ class TorchFitterBase:
                 loss = self.loss_function(output, y)
 
             # Reduce loss and apply sample weights if existing
-            loss = self.reduce_loss(loss, w)
+            #loss = self.reduce_loss(loss, w)  testing without reduction
 
             # backpropagation
             self.mixed_precision.scale(loss).backward()
