@@ -432,9 +432,9 @@ class TorchFitterBase:
         np.array
             Predicted values by the model
         """
-        if self.model is None or self.loss_function is None or self.optimizer is None:
-            self.log(f"ERROR: Either model, loss function or optimizer is not existing.")
-            raise ValueError(f"ERROR: Either model, loss function or optimizer is not existing.")
+        if self.model is None:
+            self.log(f"ERROR: Model is not existing.")
+            raise ValueError(f"ERROR: Model is not existing.")
 
         self.model.eval()
         y_preds = []
