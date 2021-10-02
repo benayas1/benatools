@@ -55,10 +55,10 @@ class TorchFitterBase:
     """
 
     def __init__(self,
-                 model: torch.nn.Module,
-                 device: str,
-                 loss: torch.nn.Module,
-                 optimizer: torch.optim,
+                 model: torch.nn.Module = None,
+                 device: str = 'cpu',
+                 loss: torch.nn.Module = None,
+                 optimizer: torch.optim = None,
                  scheduler: torch.optim.lr_scheduler = None,
                  validation_scheduler: bool = True,
                  step_scheduler: bool = False,
@@ -79,11 +79,13 @@ class TorchFitterBase:
             verbose (bool, optional): Whether to print outputs or not. Defaults to True.
             save_log (bool, optional): Whether to write the log in log.txt or not. Defaults to True.
         """
-
-        if type(loss) == type:
-            self.loss_function = loss()
+        if loss is not None:
+            if type(loss) == type:
+                self.loss_function = loss()
+            else:
+                self.loss_function = loss
         else:
-            self.loss_function = loss
+            self.loss_function = None
 
         self.epoch = 0  # current epoch
         self.verbose = verbose
@@ -154,6 +156,9 @@ class TorchFitterBase:
         Returns:
             pd.DataFrame: DataFrame containing training history
         """
+        if self.model is None or self.loss_function is None or self.optimizer is None:
+            self.log(f"ERROR: Either model, loss function or optimizer is not existing.")
+            raise ValueError(f"ERROR: Either model, loss function or optimizer is not existing.")
 
         if self.best_metric == 0.0:
             self.best_metric = np.inf if early_stopping_mode == 'min' else -np.inf
@@ -355,6 +360,10 @@ class TorchFitterBase:
         float
             Calculated metric if a metric is provided, else None
         """
+        if self.model is None or self.loss_function is None or self.optimizer is None:
+            self.log(f"ERROR: Either model, loss function or optimizer is not existing.")
+            raise ValueError(f"ERROR: Either model, loss function or optimizer is not existing.")
+
         self.model.eval()
         summary_loss = AverageMeter()
         y_preds = []
@@ -423,6 +432,9 @@ class TorchFitterBase:
         np.array
             Predicted values by the model
         """
+        if self.model is None or self.loss_function is None or self.optimizer is None:
+            self.log(f"ERROR: Either model, loss function or optimizer is not existing.")
+            raise ValueError(f"ERROR: Either model, loss function or optimizer is not existing.")
 
         self.model.eval()
         y_preds = []
@@ -432,7 +444,7 @@ class TorchFitterBase:
             if self.verbose & (verbose_steps > 0) > 0:
                 if step % verbose_steps == 0:
                     print(
-                        f'Prediction Step {step}/{len(test_loader)}, ' +
+                        f'\rPrediction Step {step}/{len(test_loader)}, ' +
                         f'time: {(time.time() - t):.2f} secs,' +
                         f'ETA: {(len(test_loader)-step)*(time.time() - t)/(step+1):.2f}', end=''
                     )
@@ -461,7 +473,7 @@ class TorchFitterBase:
         """
 
         if verbose:
-            self.log(f'Model is saved to {path}')
+            self.log(f'Checkpoint is saved to {path}')
         self.model.eval()
 
         data = {
@@ -505,7 +517,7 @@ class TorchFitterBase:
     @staticmethod
     def load_model_weights(path, model):
         """
-        Static method that loads weights into a torch module
+        Static method that loads weights into a torch module, extracted from a checkpoint
 
         Args:
             path (str): Path containing the weights. Normally a .bin or .tar file
@@ -537,12 +549,18 @@ class TorchFitterBase:
 
 
 class ImageFitter(TorchFitterBase):
-
     def unpack(self, data):
         # extract x and y from the dataloader
         x = data['x'].to(self.device)
-        y = data['y'].to(self.device)
+        x = x.float()
 
+        if 'y' in data:
+            y = data['y']
+            y = y.to(self.device)
+            y = y.float()
+        else:
+            y = None
+        
         # weights if existing
         if 'w' in data:
             w = data['w']
@@ -550,8 +568,8 @@ class ImageFitter(TorchFitterBase):
             w = w.float()
         else:
             w = None
-
-        return x, y, w
+        
+        return x, y, None
 
 class AutoencoderFitter(TorchFitterBase):
 

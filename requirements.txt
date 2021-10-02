@@ -13,4 +13,3 @@ pylint
 pytest
 tensorflow
 vtk
-xgboost

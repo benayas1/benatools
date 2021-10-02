@@ -1,18 +1,15 @@
+from collections.abc import Iterable
 import pydicom
 import scipy.ndimage
 import numpy as np
 import cv2
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from skimage import morphology
 from skimage import measure
-import matplotlib.pyplot as plt
-from plotly.offline import download_plotlyjs, init_notebook_mode, plot, iplot
-import plotly.figure_factory as ff
 from sklearn.cluster import KMeans
 import vtk
 from vtk.util import numpy_support
 import os
-from plotly.graph_objs import *
+import matplotlib.pyplot as plt
 
 def load_scan(paths, library='vtk', resample_scan=True):
     """
@@ -38,7 +35,8 @@ def load_scan(paths, library='vtk', resample_scan=True):
         return load_vtk(paths, resample_scan=resample_scan)
     if library == 'pydicom':
         return load_pydicom(paths, resample_scan=resample_scan)
-    raise (f'Library {library} not supported')
+    raise Exception(f'Library {library} not supported')
+
 
 def load_pydicom(paths, resample_scan=True, return_spacing=False):
     """
@@ -162,47 +160,6 @@ def resize_scan(scan, new_shape=(128,128,128)):
     resized = np.stack([cv2.resize(resized[:,:,i], (new_shape[0], new_shape[1])) for i in range(resized.shape[2])], axis=-1 )
     return resized
 
-
-def plot_3d(image, threshold=700, color="navy"):
-    # Position the scan upright,
-    # so the head of the patient would be at the top facing the camera
-    #p = image.transpose(2, 1, 0)
-
-    verts, faces, _, _ = measure.marching_cubes_lewiner(image, threshold)
-
-    fig = plt.figure(figsize=(10, 10))
-    ax = fig.add_subplot(111, projection='3d')
-
-    # Fancy indexing: `verts[faces]` to generate a collection of triangles
-    mesh = Poly3DCollection(verts[faces], alpha=0.5)
-    mesh.set_facecolor(color)
-    ax.add_collection3d(mesh)
-
-    ax.set_xlim(0, image.shape[0])
-    ax.set_ylim(0, image.shape[1])
-    ax.set_zlim(0, image.shape[2])
-
-    plt.show()
-
-
-def plotly_3d(image, threshold=700, ):
-    p = image.transpose(2, 1, 0)
-    verts, faces, _, _ = measure.marching_cubes_lewiner(p, threshold)
-
-    x, y, z = zip(*verts)
-
-    print("Drawing")
-
-    # Make the colormap single color since the axes are positional not intensity.
-    #    colormap=['rgb(255,105,180)','rgb(255,255,51)','rgb(0,191,255)']
-    colormap = ['rgb(236, 236, 212)', 'rgb(236, 236, 212)']
-
-    fig = ff.create_trisurf(x=x, y=y, z=z, plot_edges=False,
-                            colormap=colormap,
-                            simplices=faces,
-                            backgroundcolor='rgb(64, 64, 64)',
-                            title="Interactive Visualization")
-    iplot(fig)
 
 def air_removal_mask(dilation):
     labels = measure.label(dilation)
@@ -341,7 +298,7 @@ def load_vtk_file(path):
 
 
 def load_vtk(paths, resample_scan=True, return_spacing=False, sort_paths=False):
-    if isinstance(paths, list):
+    if isinstance(paths, Iterable):
         if sort_paths:
             paths.sort(key=lambda x: int(x.split('/')[-1].split('.')[0]), reverse=True)
         slices = [load_vtk_file(path) for path in paths]
@@ -353,7 +310,7 @@ def load_vtk(paths, resample_scan=True, return_spacing=False, sort_paths=False):
             scan, reader = load_vtk_dir(paths)
             pixel_spacing = reader.GetPixelSpacing()
         else:
-            raise("No valid paths format")
+            raise Exception("No valid paths format")
 
     thickness = pixel_spacing[2]
     pixel_spacing = pixel_spacing[0]

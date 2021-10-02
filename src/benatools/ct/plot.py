@@ -1,5 +1,6 @@
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from plotly.offline import iplot
+import plotly.figure_factory as ff
 from skimage import measure
 import matplotlib.pyplot as plt
 
@@ -8,7 +9,7 @@ def plot_3d(image, threshold=700, color="navy"):
     # so the head of the patient would be at the top facing the camera
     #p = image.transpose(2, 1, 0)
 
-    verts, faces, _, _ = measure.marching_cubes_lewiner(image, threshold)
+    verts, faces, _, _ = measure.marching_cubes(image, threshold)
 
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111, projection='3d')
@@ -27,7 +28,7 @@ def plot_3d(image, threshold=700, color="navy"):
 
 def plotly_3d(image, threshold=700, ):
     p = image.transpose(2, 1, 0)
-    verts, faces, _, _ = measure.marching_cubes_lewiner(p, threshold)
+    verts, faces, _, _ = measure.marching_cubes(p, threshold)
 
     x, y, z = zip(*verts)
 
