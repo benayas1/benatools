@@ -99,7 +99,7 @@ class TorchFitterBase:
 
         self.model = model
         self.device = device
-        self.mixed_precision = torch.cuda.amp.GradScaler()
+        self.mixed_precision = torch.cuda.amp.GradScaler() if mixed_precision else None
 
         # Optimizer object
         self.optimizer = optimizer
@@ -144,7 +144,7 @@ class TorchFitterBase:
             train_loader (torch.utils.data.DataLoader): Training data
             val_loader (torch.utils.data.DataLoader, optional): Validation Data. Defaults to None.
             n_epochs (int, optional): Maximum number of epochs to train. Defaults to 1.
-            metric ( function with (y_true, y_pred, **metric_kwargs) signature, optional): Metric to evaluate results on. Defaults to None.
+            metrics ( function with (y_true, y_pred, **metric_kwargs) signature, optional): Metric to evaluate results on. Defaults to None.
             metric_kwargs (dict, optional): Arguments for the passed metric. Ignored if metric is None. Defaults to {}.
             early_stopping (int, optional): Early stopping epochs. Defaults to 0.
             early_stopping_mode (str, optional): Min or max criteria. Defaults to 'min'.
@@ -327,7 +327,7 @@ class TorchFitterBase:
         """
         self.optimizer.zero_grad()
 
-        if self.mixed_precision:
+        if self.mixed_precision is not None:
             with torch.cuda.amp.autocast():
                 # Output and loss
                 if isinstance(x, tuple) or isinstance(x, list):
@@ -339,8 +339,8 @@ class TorchFitterBase:
 
                 loss = self.loss_function(output, y)
 
-                # Reduce loss and apply sample weights if existing
-                loss = self.reduce_loss(loss, w)
+            # Reduce loss and apply sample weights if existing
+            loss = self.reduce_loss(loss, w)
 
             # backpropagation
             self.mixed_precision.scale(loss).backward()
