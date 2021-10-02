@@ -43,6 +43,9 @@ class AverageMeter(object):
         n : int, Optional
             batch size
         """
+        if np.isnan(val) or np.isinf(val):
+            return
+
         self.val = val
         self.sum += val * n
         self.count += n
@@ -327,25 +330,7 @@ class TorchFitterBase:
         """
         self.optimizer.zero_grad()
 
-        if self.mixed_precision is not None:
-            with torch.cuda.amp.autocast():
-                # Output and loss
-                if isinstance(x, tuple) or isinstance(x, list):
-                    output = self.model(*x)
-                elif isinstance(x, dict):
-                    output = self.model(**x)
-                else:
-                    output = self.model(x)
-
-                loss = self.loss_function(output, y)
-
-            # Reduce loss and apply sample weights if existing
-            #loss = self.reduce_loss(loss, w)  testing without reduction
-
-            # backpropagation
-            self.mixed_precision.scale(loss).backward()
-
-        else:
+        with torch.cuda.amp.autocast(enabled=self.mixed_precision is not None):
             # Output and loss
             if isinstance(x, tuple) or isinstance(x, list):
                 output = self.model(*x)
@@ -358,8 +343,11 @@ class TorchFitterBase:
 
             # Reduce loss and apply sample weights if existing
             loss = self.reduce_loss(loss, w)
-
-            # backpropagation
+        
+        # backpropagation
+        if self.mixed_precision is not None:
+            self.mixed_precision.scale(loss).backward()
+        else:
             loss.backward()
 
         return loss
