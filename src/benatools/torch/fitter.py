@@ -68,7 +68,7 @@ class TorchFitterBase:
                  folder: str = 'models',
                  verbose: bool = True,
                  save_log: bool = True,
-                 mixed_precision: bool = True,
+                 use_amp: bool = False,
                  ):
         """
         Args:
@@ -102,7 +102,8 @@ class TorchFitterBase:
 
         self.model = model
         self.device = device
-        self.mixed_precision = torch.cuda.amp.GradScaler() if mixed_precision else None
+        self.use_amp = use_amp
+        self.scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
         # Optimizer object
         self.optimizer = optimizer
@@ -297,12 +298,9 @@ class TorchFitterBase:
 
             summary_loss.update(loss.detach().item(), batch_size)
 
-            # update optimizer
-            if self.mixed_precision is not None:
-                self.mixed_precision.step(self.optimizer)
-                self.mixed_precision.update()
-            else:
-                self.optimizer.step()
+            # update optimizer using mixed precision if requested
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
 
             # LR Scheduler step after epoch
             if self.step_scheduler and self.scheduler is not None:
@@ -330,7 +328,7 @@ class TorchFitterBase:
         """
         self.optimizer.zero_grad()
 
-        with torch.cuda.amp.autocast(enabled=self.mixed_precision is not None):
+        with torch.cuda.amp.autocast(enabled=self.use_amp):
             # Output and loss
             if isinstance(x, tuple) or isinstance(x, list):
                 output = self.model(*x)
@@ -345,14 +343,12 @@ class TorchFitterBase:
             loss = self.reduce_loss(loss, w)
         
         # backpropagation
-        if self.mixed_precision is not None:
-            self.mixed_precision.scale(loss).backward()
-        else:
-            loss.backward()
+        self.scaler.scale(loss).backward()
+
 
         return loss
 
-    def validation(self, val_loader, metric=None, metric_kwargs={}, verbose_steps=0):
+    def validation(self, val_loader, metric=None, verbose_steps=0):
         """
         Validates a model
         Parameters
@@ -493,6 +489,7 @@ class TorchFitterBase:
                 'optimizer_state_dict': self.optimizer.state_dict(),
                 'best_summary_loss': self.best_metric,
                 'epoch': self.epoch,
+                'scaler': self.scaler.state_dict()
         }
 
         if self.scheduler is not None:
@@ -519,6 +516,7 @@ class TorchFitterBase:
             return
 
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.scaler.load_state_dict(checkpoint["scaler"])
 
         self.best_metric = checkpoint['best_summary_loss']
         self.epoch = checkpoint['epoch'] + 1
