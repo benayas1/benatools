@@ -1,7 +1,5 @@
 catboost
 category-encoders
-efficientnet
-efficientnet-pytorch
 geffnet
 hyperopt
 ipykernel
