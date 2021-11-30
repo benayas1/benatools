@@ -122,7 +122,7 @@ def convert(data,
     Parameters
     ----------
     data : np.array or pd.DataFrame
-        A 2D object with one row per sample
+        A 2D object with one row per sample or a DataFrame with 2 columns
     folder : str
         Folder to store the tf record
     file_prefix : str, Optional

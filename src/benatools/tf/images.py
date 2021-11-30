@@ -436,7 +436,7 @@ def _mixup_labels(shape, label1, label2, n_classes, a):
     return (1 - a) * lab1 + a * lab2
 
 
-def cutmix(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_labels=None):
+def cutmix(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_labels=None, classification=True):
     """
     Cutmix randomly remove squares from training images
 
@@ -456,6 +456,8 @@ def cutmix(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_
         number of classes
     rank : int
         values must be 2 (image) or 3 (3d shape)
+    classification : bool
+        whether the label comes from a classification or regression problem
 
     Returns
     -------
@@ -501,7 +503,10 @@ def cutmix(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_
 
         # Make Cutmix Label
         a = tf.cast((WIDTH ** rank) / (dimension ** rank), tf.float32)
-        labs.append(_mixup_labels(label.shape, label[j], label[k], n_classes, a))
+        if classification:
+            labs.append(_mixup_labels(label.shape, label[j], label[k], n_classes, a))
+        else:
+            labs.append((1 - a) * label[j] + a * label[k])
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR (maybe use Python typing instead?)
     if rank == 2:
@@ -511,6 +516,8 @@ def cutmix(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_
     else:
         raise Exception(f"Rank incorrect. Should be 2 or 3, but it is {rank}") 
 
+    if classification:
+        label2 = tf.reshape(tf.stack(labs), (batch_size, 1))
     if n_labels:
         label2 = tf.reshape(tf.stack(labs), (batch_size, n_labels))
     else:
@@ -518,7 +525,7 @@ def cutmix(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_
     return image2, label2
 
 
-def mixup(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_labels=None):
+def mixup(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_labels=None, classification=True):
     """
     Mixup randomly mixes data from two samples
 
@@ -538,6 +545,8 @@ def mixup(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_l
         number of classes
     rank : int
         values must be 2 (image) or 3 (3d shape)
+    classification : bool
+        whether the label comes from a classification or regression problem
 
     Returns
     -------
@@ -562,13 +571,18 @@ def mixup(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_l
         imgs.append((1 - a) * img1 + a * img2)
 
         # Make Cutmix Label
-        labs.append(_mixup_labels(label.shape, label[j], label[k], n_classes, a))
+        if classification:
+            labs.append(_mixup_labels(label.shape, label[j], label[k], n_classes, a))
+        else:
+            labs.append((1 - a) * label[j] + a * label[k])
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR (maybe use Python typing instead?)
     image2 = tf.reshape(tf.stack(imgs), (batch_size, dimension, dimension, 3)) if rank == 2 else tf.reshape(tf.stack(imgs), (
     batch_size, dimension, dimension, dimension, 3))
 
-    if n_labels:
+    if classification:
+        label2 = tf.reshape(tf.stack(labs), (batch_size, 1))
+    elif n_labels:
         label2 = tf.reshape(tf.stack(labs), (batch_size, n_labels))
     else:
         label2 = tf.reshape(tf.stack(labs), (batch_size, n_classes))
