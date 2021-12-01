@@ -506,7 +506,7 @@ def cutmix(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_
         if classification:
             labs.append(_mixup_labels(label.shape, label[j], label[k], n_classes, a))
         else:
-            labs.append((1 - a) * label[j] + a * label[k])
+            labs.append((1 - a) * tf.cast(label[j], dtype=tf.float32) + a * tf.cast(label[k], dtype=tf.float32))
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR (maybe use Python typing instead?)
     if rank == 2:
@@ -574,7 +574,7 @@ def mixup(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_l
         if classification:
             labs.append(_mixup_labels(label.shape, label[j], label[k], n_classes, a))
         else:
-            labs.append((1 - a) * label[j] + a * label[k])
+            labs.append((1 - a) * tf.cast(label[j], dtype=tf.float32) + a * tf.cast(label[k], dtype=tf.float32))
 
     # RESHAPE HACK SO TPU COMPILER KNOWS SHAPE OF OUTPUT TENSOR (maybe use Python typing instead?)
     image2 = tf.reshape(tf.stack(imgs), (batch_size, dimension, dimension, 3)) if rank == 2 else tf.reshape(tf.stack(imgs), (
