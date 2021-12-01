@@ -516,7 +516,7 @@ def cutmix(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_
     else:
         raise Exception(f"Rank incorrect. Should be 2 or 3, but it is {rank}") 
 
-    if classification:
+    if not classification:
         label2 = tf.reshape(tf.stack(labs), (batch_size, 1))
     if n_labels:
         label2 = tf.reshape(tf.stack(labs), (batch_size, n_labels))
@@ -580,7 +580,7 @@ def mixup(batch, label, batch_size=32, prob=1.0, dimension=256, n_classes=1, n_l
     image2 = tf.reshape(tf.stack(imgs), (batch_size, dimension, dimension, 3)) if rank == 2 else tf.reshape(tf.stack(imgs), (
     batch_size, dimension, dimension, dimension, 3))
 
-    if classification:
+    if not classification:
         label2 = tf.reshape(tf.stack(labs), (batch_size, 1))
     elif n_labels:
         label2 = tf.reshape(tf.stack(labs), (batch_size, n_labels))
